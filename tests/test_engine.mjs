@@ -1,5 +1,5 @@
-import { MOVEMENTS, makeAnalyzer, buildComment, buildReply, analyzePose, customMovement, poseFeatures, poseSample, buildPoseTemplate, comparePose, matchMovement, featureCue, StillCapture, motionFrame, buildMotionTemplate, unpackMotion, motionAt, motionPose, scoreFollow, motionMovement, FollowAnalyzer, HandSignal, cutGestureTail, packBytes, unpackBytes, dtwPath } from '../src/engine.mjs';
-import { lerpPose, squatPose, pressPose, squatScript, pressScript, simulate, seeded, studentSquatPlan, studentLevel, bowPose, bowScript, runScript, archeryPose, standPose, armsPose, poseScript, cprScript, plankPose, pushupPose, lungePose } from '../src/synth.mjs';
+import { MOVEMENTS, makeAnalyzer, buildComment, buildReply, analyzePose, customMovement, poseFeatures, poseSample, buildPoseTemplate, comparePose, matchMovement, featureCue, StillCapture, motionFrame, buildMotionTemplate, unpackMotion, motionAt, motionPose, scoreFollow, motionMovement, FollowAnalyzer, HandSignal, cutGestureTail, packBytes, unpackBytes, dtwPath, activeRange, splitCycles } from '../src/engine.mjs';
+import { runPose, lerpPose, squatPose, pressPose, squatScript, pressScript, simulate, seeded, studentSquatPlan, studentLevel, bowPose, bowScript, runScript, archeryPose, standPose, armsPose, poseScript, cprScript, plankPose, pushupPose, lungePose } from '../src/synth.mjs';
 const W=1000,H=1000;
 function base(){ return Array.from({length:33},()=>({x:0.5,y:0.5,z:0,visibility:0.9})); }
 const set=(lm,i,p)=>{ lm[i]={x:p.x,y:p.y,z:0,visibility:0.9}; };
@@ -202,5 +202,20 @@ let fails=0; const check=(c,msg)=>{ if(!c){ fails++; console.log('FAIL:',msg);} 
     check(end>base.duration-0.5&&end<base.duration+0.15, `signal: 끝내려고 손을 든 부분은 잘라 낸다 (${end.toFixed(2)}초, 동작 끝 ${base.duration.toFixed(2)}초)`); const t2=buildMotionTemplate([cut,takes[1],takes[2]]); check(Math.abs(t2.dur-tpl.dur)<0.4, 'signal: 잘라 낸 촬영으로 만든 모범의 길이가 같다'); }
   // 멈춘 자세도 "동작 모범"으로 찍을 수 있다(예: 플랭크처럼 버티는 자세)
   { const hold=()=>{ const fr=[]; for(let t=0;t<=3000;t+=1000/24) fr.push(motionFrame(noisy(archeryPose()),MW,MH,t)); return fr; }; const th=buildMotionTemplate([hold(),hold()]); const mh=motionMovement({id:'h',name:'버티기',tpl:th}); check(th&&th.move<12&&mh.isHold, `motion: 거의 안 움직이면 "멈춘 자세"로 본다(움직임 ${th.move}°)`); }
+}
+// --- 올린 영상에서 모범 구간 찾기 (폰으로 찍은 영상: 걸어 들어옴 → 잠깐 멈춤 → 동작 → 잠깐 멈춤 → 걸어 나옴) ---
+{ const VW=720, VH=1280; const ease=(u)=>0.5-0.5*Math.cos(Math.PI*Math.max(0,Math.min(1,u))); let seed=3; const rnd=()=>{ seed=(seed*1664525+1013904223)>>>0; return seed/4294967296; }; const noisy=(lm)=>lm.map(p=>({x:p.x+(rnd()-0.5)*0.004,y:p.y+(rnd()-0.5)*0.004,z:0,visibility:p.visibility}));
+  const grow=(lm,k)=>lm.map(p=>({x:0.5+(p.x-0.5)*k,y:0.9+(p.y-0.9)*k,z:0,visibility:p.visibility})); // 카메라에 가까우면 몸이 크게 보인다
+  // 0~3초 걸어 들어감(몸이 1.6배 → 1배), 3~4.5초 멈춤, 동작 mdur초, 1.5초 멈춤, 2.5초 걸어 나옴
+  const video=(motion,mdur)=>{ const stand=motion(0), fr=[], total=3+1.5+mdur+1.5+2.5; for(let t=0;t<=total*1000;t+=1000/15){ const s=t/1000; const lm= s<3? grow(runPose((s*1.6)%1,{}),1.6-0.6*(s/3)) : s<4.5? stand : s<4.5+mdur? motion(s-4.5) : s<6+mdur? stand : grow(runPose((s*1.6)%1,{}),1+0.6*((s-6-mdur)/2.5)); fr.push(motionFrame(noisy(lm),VW,VH,t)); } return fr; };
+  const shot=(t)=>{ const u= t<1.4? ease(t/1.4) : t<3.0? 1 : t<4.0? 1-ease((t-3)/1.0) : 0; return lerpPose(standPose(),archeryPose(),u); };
+  let fr=video(shot,4.0), r=activeRange(fr), cyc=splitCycles(fr,r.t0,r.t1);
+  check(r.t0>=3000&&r.t0<=4600&&r.t1>=8400&&r.t1<=10000&&!r.hold, `video: 걸어 들어오고 나가는 부분을 빼고 동작 구간을 찾는다 (${(r.t0/1000).toFixed(1)}~${(r.t1/1000).toFixed(1)}초, 실제 동작 4.5~8.5초)`);
+  check(cyc.length===1, 'video: 한 번 하는 동작은 한 번으로 본다'); { const t=buildMotionTemplate(cyc.map(([a,b])=>fr.filter(f=>f.t>=a&&f.t<=b))); check(t&&t.n===1&&t.dur>3.6&&t.dur<5.2&&t.move>100, `video: 그 구간으로 모범 동작 ${t.dur}초`); }
+  const sq=squatScript([{bottom:90,trunk:32,down:1.0,hold:.3,up:.9,rest:.6},{bottom:88,trunk:34,down:1.1,hold:.3,up:.9,rest:.6},{bottom:91,trunk:33,down:1.0,hold:.2,up:1.0,rest:.6}],{lead:0,ar:VW/VH});
+  fr=video(sq,sq.duration); r=activeRange(fr); cyc=splitCycles(fr,r.t0,r.t1); { const t=buildMotionTemplate(cyc.map(([a,b])=>fr.filter(f=>f.t>=a&&f.t<=b))); check(cyc.length===3&&t&&t.n===3&&t.dur>2&&t.dur<3.2&&t.sd<4, `video: 스쿼트 3번을 한 번씩 나눠 평균을 낸다 (${cyc.map(c=>((c[1]-c[0])/1000).toFixed(1)).join(', ')}초 → 모범 ${t&&t.dur}초)`); }
+  fr=Array.from({length:91},(_,i)=>motionFrame(noisy(archeryPose()),VW,VH,i*1000/15)); r=activeRange(fr); check(r.hold&&r.t1-r.t0>=4000, 'video: 처음부터 끝까지 멈춘 자세면 "멈춘 자세"로 본다');
+  fr=Array.from({length:69},(_,i)=>motionFrame(noisy(shot(i/15-0.3)),VW,VH,i*1000/15)); r=activeRange(fr); check(r.t0<=300&&r.t1>=4200&&splitCycles(fr,r.t0,r.t1).length===1, 'video: 동작만 담긴 짧은 영상은 통째로 쓴다(가운데 멈춤에서 자르지 않는다)');
+  check(activeRange([])===null&&splitCycles([],0,1000).length===1, 'video: 사람이 안 잡힌 영상은 탈 없이 넘어간다');
 }
 console.log(fails? `\n${fails} FAIL(S)`:'\nALL OK');

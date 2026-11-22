@@ -1,8 +1,8 @@
 {
   "name": "dsu-movecoach",
-  "version": "6.0.0",
+  "version": "7.0.0",
   "private": true,
-  "description": "DSU 무브코치 — 모범 자세를 올리면 링크 하나로 모두가 따라 하고 점수를 받는다 (2026 DSU AI 챌린지 B트랙)",
+  "description": "DSU 무브코치 — 모범 동작 영상을 올리면 링크 하나로 모두가 따라 하며 배운다 (2026 DSU AI 챌린지 B트랙)",
   "license": "UNLICENSED",
   "engines": {
     "node": ">=18"

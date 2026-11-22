@@ -30,4 +30,7 @@ open(os.path.join(ROOT, 'index.html'), 'w', encoding='utf-8').write(out)
 os.makedirs(os.path.join(ROOT, 'build'), exist_ok=True)
 open(os.path.join(ROOT, 'build', 'main.mjs'), 'w', encoding='utf-8').write(
     re.search(r'<script type="module">(.*?)</script>', out, re.S).group(1))
-print('index.html bytes', len(out.encode()))
+import re
+m = re.search(r'const BUILD=(\d+);', out)
+if m: open(os.path.join(ROOT, 'version.txt'), 'w', encoding='utf-8').write(m.group(1) + '\n')
+print('index.html bytes', len(out.encode()), '| build', m.group(1) if m else '?')

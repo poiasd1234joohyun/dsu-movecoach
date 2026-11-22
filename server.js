@@ -178,6 +178,7 @@ function resolvePublic(urlPath) {
   let p;
   try { p = decodeURIComponent(urlPath.split('?')[0]); } catch (e) { return null; }
   if (p === '/' || p === '/index.html') return path.join(ROOT, 'index.html');
+  if (p === '/version.txt') return path.join(ROOT, 'version.txt');
   const parts = p.split('/').filter(Boolean);
   if (!parts.length || !PUBLIC_DIRS.includes(parts[0])) return null;
   if (parts.some((s) => s === '..' || s.startsWith('.'))) return null;

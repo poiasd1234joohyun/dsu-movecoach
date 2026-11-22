@@ -65,7 +65,10 @@ function trySample(){ enterTry(MOVEMENTS.squat); startSession({mode:'practice', 
 // C. 모이는 화면
 function tryAdmin(){ ensureDemoRoom(); openAdminPage(DEMO_ID,DEMO_KEY); }
 function tryBoard(){ ensureDemoRoom(); openAdminPage(DEMO_GAME_ID,DEMO_KEY); }
-function retry(kind){ if(kind==='cam') tryCamera(); else if(kind==='match') tryMatch(); else if(kind==='video') trySample(); else trySynth(String(kind).split(':')[1]||'motion'); }
+/** 방금 정한 모범을 만든 사람이 이 기기에서 먼저 따라 해 본다 */
+let TRY_MV=null;
+function tryModel(mv){ TRY_MV=mv; enterTry(mv); startSession({mode:'practice', movement:mv, goal: (mv.type==='follow'||mv.type==='match')? 3 : Math.min(5,defaultGoal(mv)), student:TRY_ME, try:'model'}); }
+function retry(kind){ if(kind==='model'&&TRY_MV){ tryModel(TRY_MV); return; } if(kind==='cam') tryCamera(); else if(kind==='match') tryMatch(); else if(kind==='video') trySample(); else trySynth(String(kind).split(':')[1]||'motion'); }
 function renderTry(){
   $('#tryCards').innerHTML=`
     <div class="trycard"><canvas class="figcv" id="tryCv2"></canvas><div class="tc"><h3>카메라 없이 보기</h3><p>가상 인물이 모범을 따라 합니다. 일부러 틀리는 회차가 섞여 있습니다.</p><div class="btns"><button class="btn primary" data-syn="motion" id="trySyn">${ICON.play} 모범 따라 하기</button><button class="btn" data-syn="squat">스쿼트</button><button class="btn" data-syn="run">달리기</button><button class="btn" data-syn="bow">인사</button><button class="btn" id="tryVid" hidden>찍어 둔 영상</button></div></div></div>

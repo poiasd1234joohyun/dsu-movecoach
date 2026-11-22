@@ -1,76 +1,71 @@
-/* ================= 앱 1: 첫 화면·학과별 활용·링크 만들기·시범 등록·내 링크 ================= */
-// 쓰임새 묶음 → 보여 줄 장면(그림). 학과마다 이 묶음 하나에 연결된다.
-const TYPES={
-  motion:{name:'실기 동작',scenes:['match','squat','run']},
-  posture:{name:'자세·건강',scenes:['match','plank','press']},
-  procedure:{name:'절차·시연',scenes:['cpr','match']},
-  present:{name:'응대·발표',scenes:['bow','match']},
-  play:{name:'게임·활동',scenes:['race','match']},
-};
+/* ================= 앱 1: 첫 화면·활용 분야·사용법 영상·링크 만들기·내 링크 ================= */
 const HOME_SCENES=['match','squat','bow','run','cpr','plank','race'];
-const DEPTS=[
-  {college:'글로벌관광대학',depts:[['스포츠레저학과','motion','웨이트트레이닝·GX·스포츠지도사 실기에서 자세 교정과 과제 제출, 중간·기말 실기 시험'],['호텔경영학과','present','인사 각도(15·30·45°)와 응대 자세 시연, 서비스 롤플레이 평가'],['관광경영⋅컨벤션학과','present','행사 진행·안내 시연의 자세와 시선, 발표 과제 연습'],['영어학과','present','영어 스피치 연습: 자세·제스처·시선 점검 후 발표'],['일본어학과','present','프레젠테이션·접객 인사 예절 시연'],['중국어학과','present','프레젠테이션·접객 인사 예절 시연']]},
-  {college:'바이오헬스융합대학',depts:[['간호학과','procedure','심폐소생술·환자 이송 자세·기본간호 절차를 음성 안내로 연습, 실습 전 자가 점검'],['운동처방학과','motion','운동 처방 동작의 정확성 평가, 가동범위 측정, 고객 시연 과제'],['체육학과','motion','실기 과목 자세 교정·과제·실기 시험, 반 전체 게임'],['작업치료학과','posture','일상동작·자세 교육, 치료사 시연 평가'],['임상병리학과','procedure','채혈·검체 처리 절차의 순서 수행 연습'],['방사선학과','posture','환자 자세 잡기(포지셔닝) 시연과 촬영 자세 교육'],['치위생학과','posture','진료 자세(술자 자세) 교육과 시연 평가'],['보건행정학과','present','발표·응대 시연 과제'],['식품영양학과','procedure','조리·위생 절차 순서 수행 연습'],['화장품학과','present','시연·발표 자세 점검']]},
-  {college:'미래커리어대학',depts:[['생활스포츠지도학과(스포츠레저산업학과)','motion','생활스포츠지도사 실기·구술 대비, 지도자 시범 평가'],['시니어운동처방학과','motion','노인체력검사(의자 일어서기·균형) 자동 측정, 안전한 운동 지도'],['안전관리학과(사회안전학과)','procedure','응급처치·심폐소생술, 안전 자세(들기·대피) 교육'],['사회복지상담학과','present','상담 롤플레이의 비언어 자세 점검'],['커피문화산업학과','procedure','바리스타 동작·응대 시연'],['AI창업학과(ICT융합공학과)','play','동작 인식 서비스 기획·시연 실습'],['실용콘텐츠창작학과','play','모션 레퍼런스·콘텐츠 제작 실습']]},
-  {college:'경영사회과학대학',depts:[['경영학전공','present','피칭·발표 연습: 자세·제스처·시선'],['회계세무학전공','present','발표 과제 연습'],['국제통상학과','present','프레젠테이션 연습'],['국제물류학과','present','프레젠테이션·현장 안전 자세 교육'],['사회복지학과','present','상담·방문 응대 롤플레이 자세 점검'],['상담심리치료학과','present','비언어 의사소통(자세·거리·몸 기울임) 실습'],['경찰학과','motion','체포술·제압 동작 연습, 체력 검정 대비']]},
-  {college:'소프트웨어융합대학',depts:[['컴퓨터공학부','play','온디바이스 AI·동작 인식 실습 교재, 게임 제작'],['스마트모빌리티학부','posture','현장 안전 자세·작업 자세 교육'],['건축공학과','posture','현장 안전교육: 들기 자세·보호구 착용 절차'],['디지털금융학과','present','발표 연습']]},
-  {college:'디자인대학',depts:[['디자인학부(시각·디지털미디어·제품인터랙션·환경)','play','인터랙션 프로토타입, 인체 포즈 레퍼런스'],['패션디자인학과','posture','피팅·워킹 자세 분석'],['광고홍보학과','present','프레젠테이션·촬영 연출 자세'],['건축학과','posture','현장 안전 자세 교육']]},
-  {college:'미디어콘텐츠대학',depts:[['방송영상학과','present','카메라 앞 자세·동선 연습'],['게임학과','play','모션 기반 게임 기획·제작 실습'],['영상애니메이션학과','play','동작 레퍼런스 캡처'],['웹툰학과','play','인체 포즈 레퍼런스']]},
-  {college:'임권택영화예술대학',depts:[['영화과','present','연기 동작·카메라 앞 자세'],['뮤지컬엔터테인먼트과','motion','안무·신체 훈련 동작 반복 연습'],['연기과','motion','신체 훈련·동작 정확성 연습']]},
-  {college:'민석교양대학 · 전교생',depts:[['교양 체육·건강','posture','전교생 자세·건강 과제, 거북목·앉은 자세 점검'],['교양 발표·스피치','present','발표 자세 연습']]},
+// 방식은 세 가지로 보여 준다. "과제·시험"은 안에서 과제(assignment)와 시험(exam: 점수 숨김·비밀번호)으로 나뉜다
+const HOME_MODES=[['practice','연습','따라 하면 바로 교정'],['assignment','과제·시험','찍어서 제출, 결과는 만든 사람만'],['game','게임','정확하게 먼저 채우기']];
+/* 활용 분야: 지금 되는 것과 앞으로의 발전 과제를 나눠 적는다(되지 않는 것을 되는 것처럼 쓰지 않는다) */
+const FIELDS=[
+  {name:'스포츠·체육 계열', scene:'match', now:['자세 교정: 정면과 옆에서 각각 찍어 비교','웨이트 트레이닝: 스쿼트·런지·푸시업','GX·필라테스 동작','양궁 슈팅, 농구 슈팅 폼','달리기 자세 (시범 단계)'], next:['공·활 같은 도구가 움직인 길','아주 빠른 동작의 순간 포착','여러 방향의 영상을 합친 입체 분석']},
+  {name:'보건·간호·응급처치', scene:'cpr', now:['가슴압박 자세와 속도','심폐소생술 절차의 순서','환자 이동·체위 변경처럼 몸을 쓰는 동작'], next:['붕대법(나선대·나선절전대)처럼 감긴 모양의 판정','손 위치의 정밀한 판정']},
+  {name:'호텔·관광·서비스', scene:'bow', now:['인사 각도와 빠르기','안내 동작(팔 방향), 서 있는 자세'], next:['미소·표정 평가','시선 처리']},
+  {name:'사범·교육·그 밖의 학과', scene:'press', now:['응급처치 의무교육 실습','발표 자세와 큰 몸짓','실험·실습의 기본 동작'], next:['손가락 단위의 세밀한 동작(악기, 수어, 기구 조작)']},
 ];
 
-/* ---------- 첫 화면: 글 대신 그림 ---------- */
+/* ---------- 첫 화면 ---------- */
 let homeReady=false;
-const modeCard=(k,pressed)=>`<button class="bigmode ${k}" data-mode="${k}"${pressed==null?'':` aria-pressed="${pressed}"`}><span class="mi">${MODE_SVG[k]}</span><b>${MODE_NAME[k]}</b><span class="mh">${MODE_HINT[k]}</span></button>`;
+function startCreate(mode){ if(mode) C.mode=mode; C.out=null; C.step=2; location.hash='#create'; renderCreate(); showView('create'); }
 function renderHome(){
-  $('#homeModes').innerHTML=Object.keys(MODE_NAME).map(k=>modeCard(k)).join('');
-  $$('#homeModes .bigmode').forEach(b=>b.addEventListener('click',()=>{ C.mode=b.dataset.mode; C.custom=null; C.out=null; C.step=2; location.hash='#create'; renderCreate(); showView('create'); }));
+  $('#homeModes').innerHTML=HOME_MODES.map(([k,n,h])=>`<button class="bigmode ${k}" data-mode="${k}"><span class="mi">${MODE_SVG[k]}</span><b>${n}</b><span class="mh">${h}</span></button>`).join('');
+  $$('#homeModes .bigmode').forEach(b=>b.addEventListener('click',()=>startCreate(b.dataset.mode)));
   $('#homeScenes').innerHTML=HOME_SCENES.map(id=>`<button class="scene" data-s="${id}"><canvas class="figcv"></canvas><b>${esc((SCENES[id].short)||SCENES[id].name)}</b></button>`).join('');
   $$('#homeScenes .scene').forEach(b=>{ mountScene(b.querySelector('canvas'),b.dataset.s); b.addEventListener('click',()=>openSceneSheet(b.dataset.s)); });
-  if(!homeReady){ homeReady=true; mountGuide($('#guideCv'),$('#guideSteps'),$('#guideSound')); $('#heroMake').innerHTML=`${ICON.video} 모범 동작 찍기`; $('#heroMake').addEventListener('click',(e)=>{ e.preventDefault(); goCreateWith('match'); });
-    if(HOSTED) fetch('./media/guide.mp4',{method:'HEAD'}).then(r=>{ if(r.ok&&/video/.test(r.headers.get('content-type')||'')){ $('#guideCv').hidden=true; $('#guideSteps').hidden=true; $('#guideSound').hidden=true; const v=$('#guideVideo'); v.src='./media/guide.mp4'; v.hidden=false; } }).catch(()=>{}); }
-  renderTry(); $('#verNote').textContent=APP_VERSION;
+  if(!homeReady){ homeReady=true; mountGuide($('#guideCv'),$('#guideSteps'),$('#guideSound'));
+    $('#homeFile').addEventListener('change',(e)=>{ const f=[...e.target.files]; e.target.value=''; if(!f.length) return; startCreate(); handleModelFiles(f); });
+    $('#heroDemo').addEventListener('click',()=>trySynth('motion')); $('#heroAdmin').addEventListener('click',()=>tryAdmin());
+    if(HOSTED) fetch('./media/guide.mp4',{method:'HEAD'}).then(r=>{ if(r.ok&&/video/.test(r.headers.get('content-type')||'')){ $('#guideCv').hidden=true; $('#guideSteps').hidden=true; $('#guideSound').hidden=true; const v=$('#guideVideo'); v.src='./media/guide.mp4'; v.hidden=false; } }).catch(()=>{});
+    loadTutorials().then(list=>{ if(!list.length) return; $('#homeTut').hidden=false; $('#homeTutList').innerHTML=list.slice(0,3).map(tutHtml).join(''); }); }
+  $('#verNote').textContent=APP_VERSION;
 }
-/** 장면 하나를 크게: 교정 전·후 그림 → 이 동작으로 시작. ctx: 학과 안내에서 열었을 때의 제목·한 줄·다른 장면 */
-function openSceneSheet(id, ctx={}){
+/** 장면 하나를 크게: 교정 전·후 그림 → 이 동작으로 시작 */
+function openSceneSheet(id){
   const sc=SCENES[id]||SCENES.squat; const pair=!sc.race;
-  openSheet(ctx.title||sc.name, `${ctx.type?`<p style="margin:0 0 8px"><span class="pill red">${TYPES[ctx.type].name}</span></p>`:''}${ctx.scenes&&ctx.scenes.length>1?`<div class="btns" id="scTabs" style="margin-bottom:10px">${ctx.scenes.map(s=>`<button class="btn sm" data-s="${s}" aria-pressed="${s===id}">${esc(SCENES[s].short||SCENES[s].name)}</button>`).join('')}</div>`:''}
-    <div class="ba ${pair?'':'one'}">${pair?'<canvas class="figcv" id="baBad"></canvas><canvas class="figcv" id="baGood"></canvas>':'<canvas class="figcv wide" id="baOne"></canvas>'}</div>
-    <div id="scMedia"></div>${ctx.line?`<p class="capline">${esc(ctx.line)}</p>`:''}
-    <div class="btns" style="margin-top:12px"><button class="btn primary big" id="scGo">${id==='match'?`${ICON.video} 모범 동작 찍어서 시작`:sc.race?`${ICON.game} 게임 링크 만들기`:'이 동작으로 링크 만들기'}</button></div>`);
+  openSheet(sc.name, `<div class="ba ${pair?'':'one'}">${pair?'<canvas class="figcv" id="baBad"></canvas><canvas class="figcv" id="baGood"></canvas>':'<canvas class="figcv wide" id="baOne"></canvas>'}</div>
+    <div id="scMedia"></div>
+    <div class="btns" style="margin-top:12px"><button class="btn primary big" id="scGo">${id==='match'?`${ICON.upload} 모범 영상 올려서 시작`:sc.race?`${ICON.game} 게임 링크 만들기`:'이 동작으로 링크 만들기'}</button></div>`);
   if(pair){ mountScene($('#baBad'),id,{bad:true,cue:true,label:'교정 전'}); mountScene($('#baGood'),id,{cue:true,label:'교정 후'}); } else mountScene($('#baOne'),'race');
-  $$('#scTabs [data-s]').forEach(b=>b.addEventListener('click',()=>openSceneSheet(b.dataset.s,ctx)));
   $('#scGo').onclick=()=>{ closeSheet(); goCreateWith(id); };
   // 팀원이 직접 찍은 실제 장면이 있으면 그림 아래에 보여 준다: media/scene_<이름>.mp4 또는 .jpg
-  if(HOSTED){ const box=$('#scMedia'); const tryOne=(ext,make)=>fetch(`./media/scene_${id}.${ext}`,{method:'HEAD'}).then(r=>{ if(r.ok&&!/html/.test(r.headers.get('content-type')||'')&&$('#scMedia')===box&&!box.firstChild){ box.innerHTML=make(`./media/scene_${id}.${ext}`)+'<p class="note" style="margin-top:4px">실제 수업 장면</p>'; } }).catch(()=>{}); tryOne('mp4',u=>`<video class="realmedia" src="${u}" controls playsinline muted preload="metadata"></video>`).then(()=>tryOne('jpg',u=>`<img class="realmedia" src="${u}" alt="실제 수업 장면">`)); }
+  if(HOSTED){ const box=$('#scMedia'); const tryOne=(ext,make)=>fetch(`./media/scene_${id}.${ext}`,{method:'HEAD'}).then(r=>{ if(r.ok&&!/html/.test(r.headers.get('content-type')||'')&&$('#scMedia')===box&&!box.firstChild){ box.innerHTML=make(`./media/scene_${id}.${ext}`)+'<p class="note" style="margin-top:4px">실제 수업 장면 (팀원 촬영)</p>'; } }).catch(()=>{}); tryOne('mp4',u=>`<video src="${u}" controls playsinline preload="metadata" style="width:100%;border-radius:10px;margin-top:10px"></video>`); tryOne('jpg',u=>`<img src="${u}" alt="실제 수업 장면" style="width:100%;border-radius:10px;margin-top:10px">`); }
 }
 function goCreateWith(id){ C.custom=null; C.out=null; if(id==='race'){ C.mode='game'; C.game='race'; C.movement='squat'; C.step=3; } else if(id==='match'){ if(C.mode==='game') C.game='race'; C.movement=null; C.step=2; } else { if(C.mode==='game') C.mode='practice'; C.movement= id==='cpr'?'cpr_compression':id; C.step=3; }
-  location.hash='#create'; renderCreate(); showView('create'); if(id==='match') startTemplateCreate(); }
+  location.hash='#create'; renderCreate(); showView('create'); }
 
-/* ---------- 학과별 활용: 학과를 누르면 그 학과에 맞는 장면이 열린다 ---------- */
-function renderDepts(){ $('#deptLegend').innerHTML=Object.entries(TYPES).map(([k,t])=>`<span><i class="dot t-${k}"></i>${t.name}</span>`).join(''); $('#colleges').innerHTML=DEPTS.map(c=>`<div class="college"><h3>${esc(c.college)}</h3><div class="depts">${c.depts.map((d,i)=>`<button class="dept" data-c="${esc(c.college)}" data-i="${i}"><i class="dot t-${d[1]}"></i>${esc(d[0])}</button>`).join('')}</div></div>`).join(''); $$('#colleges .dept').forEach(b=>b.addEventListener('click',()=>{ const c=DEPTS.find(x=>x.college===b.dataset.c); openDeptGuide(c.depts[+b.dataset.i]); })); }
-function openDeptGuide(d){ const [name,type,how]=d; const t=TYPES[type]; C.mode= type==='play'?'game':'practice'; openSceneSheet(t.scenes[0],{title:name,type,line:how,scenes:t.scenes}); }
+/* ---------- 활용 분야: 지금 되는 것 / 앞으로의 발전 과제 ---------- */
+function renderFields(){ $('#fieldCards').innerHTML=FIELDS.map(f=>`<article class="fieldcard"><canvas class="figcv" data-s="${f.scene}"></canvas><div><h3>${esc(f.name)}</h3><p class="fl now">지금 됩니다</p><ul>${f.now.map(x=>`<li>${esc(x)}</li>`).join('')}</ul><p class="fl next">앞으로의 발전 과제</p><ul class="next">${f.next.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div></article>`).join(''); $$('#fieldCards canvas').forEach(cv=>mountScene(cv,cv.dataset.s)); }
 
-/* ---------- 링크 만들기: 방식 → 동작 → 확인 → 링크 ---------- */
-const C={ step:1, mode:'practice', movement:'squat', custom:null, out:null, game:'race' };
+/* ---------- 사용법 영상: media/tutorials.json 에 적거나, media/tutorial1.mp4 ~ tutorial6.mp4 를 넣으면 나온다 ---------- */
+let TUT=null;
+const ytId=(u)=>{ const m=String(u||'').match(/(?:youtu\.be\/|[?&]v=|shorts\/|embed\/)([\w-]{11})/); return m?m[1]:null; };
+async function loadTutorials(){ if(TUT) return TUT; TUT=[]; if(!HOSTED) return TUT;
+  try{ const r=await fetch('./media/tutorials.json',{cache:'no-store'}); if(r.ok){ const j=await r.json(); if(Array.isArray(j)) TUT=j.filter(x=>x&&x.src).slice(0,12).map(x=>({title:String(x.title||'사용법').slice(0,40), desc:String(x.desc||'').slice(0,120), src:String(x.src).slice(0,300)})); } }catch(e){}
+  if(!TUT.length){ const found=await Promise.all([1,2,3,4,5,6].map(i=>fetch(`./media/tutorial${i}.mp4`,{method:'HEAD'}).then(r=> r.ok&&/video/.test(r.headers.get('content-type')||'')? {title:`사용법 ${i}`,desc:'',src:`tutorial${i}.mp4`} : null).catch(()=>null))); TUT=found.filter(Boolean); }
+  return TUT; }
+function tutHtml(t){ const y=ytId(t.src); const file= /^https?:\/\//.test(t.src)? safeUrl(t.src) : './media/'+t.src.replace(/[^\w.\-가-힣]/g,'');
+  const media= y? `<iframe src="https://www.youtube-nocookie.com/embed/${y}" title="${esc(t.title)}" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen loading="lazy"></iframe>` : `<video src="${esc(file)}" controls playsinline preload="metadata"></video>`;
+  return `<figure class="tut">${media}<figcaption><b>${esc(t.title)}</b>${t.desc?`<span>${esc(t.desc)}</span>`:''}</figcaption></figure>`; }
+
+/* ---------- 링크 만들기: 모범 동작 → 방식 고르기 → 링크 ---------- */
+const C={ step:2, mode:'practice', movement:'squat', custom:null, out:null, game:'race' };
 const raceOk=(mv)=>mv&&(mv.type==='rep'||mv.type==='match'||mv.type==='follow');
 // 내가 찍은 모범은 이 기기에 남겨 둔다 → 한 번 찍어서 실습·과제·시험·게임 링크를 각각 만들 수 있다
 const myModels=()=>store.get('mc6.models',[]).filter(d=>d&&d.tpl&&(d.kind==='motion'||d.kind==='match'));
 function rememberModel(def){ const d=Object.assign({},def,{demoBlob:undefined}); store.set('mc6.models',[d].concat(myModels().filter(x=>x.id!==d.id)).slice(0,8)); }
 function forgetModel(id){ store.set('mc6.models',myModels().filter(x=>x.id!==id)); if(C.custom&&C.custom.id===id) C.custom=null; }
 function renderCreate(){
-  $('#modeTiles').innerHTML=Object.keys(MODE_NAME).map(k=>modeCard(k,C.mode===k)).join('');
-  $$('#modeTiles .bigmode').forEach(b=>b.addEventListener('click',()=>{ C.mode=b.dataset.mode; C.step=2; renderCreate(); }));
   const game=C.mode==='game';
-  $('#gameKinds').hidden=!game; $('#gameKinds').innerHTML= game? `<button class="btn" data-g="race" aria-pressed="${C.game==='race'}">${ICON.game} 정확하게 N번 먼저</button><button class="btn" data-g="mugung" aria-pressed="${C.game==='mugung'}">무궁화 꽃이 피었습니다</button>`:'';
-  $$('#gameKinds [data-g]').forEach(b=>b.addEventListener('click',()=>{ C.game=b.dataset.g; if(C.game==='mugung'){ C.movement='squat'; C.custom=null; C.step=3; } renderCreate(); }));
-  const hideMoves= game&&C.game==='mugung'; $('#step2Title').textContent= `${MODE_NAME[C.mode]} — 어떤 동작을 할까요?`;
-  $('#makeTiles').hidden=hideMoves; $('#moveTiles').hidden=hideMoves; $('#moveTitle').hidden=hideMoves; $('#moreMake').hidden=hideMoves;
-  // 가장 먼저 보이는 길: 모범 동작을 직접 찍는다. 이미 만든 모범이 있으면 그 옆에 보인다.
+  // 가장 먼저 보이는 길: 찍어 둔 모범 영상을 올린다. 이미 올린 모범은 그 아래에 남아 있다.
   const cm=C.custom; const models=myModels().filter(d=>!game||raceOk(customMovement(d))); const shown= cm&&cm.tpl&&!models.some(d=>d.id===cm.id)? [cm].concat(models) : models; const demoMade= cm&&!cm.tpl? cm : null;
-  $('#makeTiles').innerHTML=`<div class="pickmodel"><canvas class="figcv" id="pmCv"></canvas><div><h3>모범 동작을 직접 찍기</h3><ol class="howto"><li><b>한 손을 들면</b> 셋을 세고 찍기 시작</li><li>동작을 한 번 → 이것을 <b>3번</b></li><li>세 번의 평균이 <b>모범</b>이 됩니다</li></ol><div class="btns"><button class="btn primary big" id="btnNewPose">${ICON.video} 모범 동작 찍기</button></div></div></div>`
-    +(shown.length?`<h3 class="subh" style="grid-column:1/-1;margin:6px 0 0">내가 찍은 모범</h3>`:'')
+  $('#makeTiles').innerHTML=`<div class="pickmodel"><canvas class="figcv" id="pmCv"></canvas><div><h3>모범 영상 올리기</h3><ol class="howto"><li>폰을 세워 두고 모범 동작을 찍습니다 <small>(몸 전체가 보이게, 1분 이내)</small></li><li>그 영상을 여기에 올립니다</li><li>AI가 동작을 읽어 <b>모범</b>으로 등록합니다</li></ol><div class="btns"><label class="btn primary big file">${ICON.upload} 모범 영상 올리기<input type="file" id="modelFile" accept="video/*,image/*" multiple></label></div><p class="note" style="margin-top:8px">플랭크 같은 멈춘 자세는 사진을 올려도 됩니다. 영상과 사진은 이 기기 밖으로 나가지 않습니다.</p></div></div>`
+    +(shown.length?`<h3 class="subh" style="grid-column:1/-1;margin:6px 0 0">내가 올린 모범</h3>`:'')
     +shown.map(d=>`<div class="mtile mine" role="button" tabindex="0" data-model="${esc(d.id)}" aria-pressed="${!!(cm&&cm.id===d.id)}"><canvas class="figcv"></canvas><b>${esc(d.name)}</b><span>${d.kind==='motion'?`모범 동작 · ${d.tpl.dur}초`:'멈춘 모범 자세'}</span><button type="button" class="del" data-del="${esc(d.id)}" aria-label="${esc(d.name)} 지우기">지우기</button></div>`).join('')
     +(demoMade?`<button class="mtile" data-mv="__custom" aria-pressed="true"><canvas class="figcv"></canvas><b>${esc(demoMade.name)}</b><span>시범 동작 · 기준 ${demoMade.target}°</span></button>`:'');
   mountScene($('#pmCv'),'match',{cue:true});
@@ -80,10 +75,11 @@ function renderCreate(){
   const cb=$('#makeTiles [data-mv="__custom"]'); if(cb){ mountScene(cb.querySelector('canvas'),demoMade.template); cb.addEventListener('click',()=>{ C.step=3; renderCreate(); }); }
   $$('#makeTiles [data-model]').forEach(b=>{ const d=shown.find(x=>x.id===b.dataset.model); mountModel(b.querySelector('canvas'),d,{bar:false}); const pick=()=>{ C.custom=d; C.movement=null; C.step=3; $('#fGoal').value=d.count||defaultGoal(customMovement(d)); $('#fGoal').dataset.touched='1'; renderCreate(); }; b.addEventListener('click',(e)=>{ if(e.target.closest('[data-del]')) return; pick(); }); b.addEventListener('keydown',(e)=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); pick(); } }); });
   $$('#makeTiles [data-del]').forEach(b=>b.addEventListener('click',()=>{ forgetModel(b.dataset.del); renderCreate(); }));
-  $('#btnNewPose').onclick=()=>startTemplateCreate(); $('#btnNewMove').onclick=()=>startDemoCreate();
+  $('#modelFile').addEventListener('change',(e)=>{ const f=[...e.target.files]; e.target.value=''; if(f.length) handleModelFiles(f); });
+  $('#btnCamModel').onclick=()=>startTemplateCreate();
   updateCreateForm(); updatePreview(); gotoStep(C.step);
 }
-function gotoStep(n){ if(n>=3&&!currentMovement()) n=2; C.step=n; for(let i=1;i<=4;i++) $('#cstep'+i).hidden= i!==n; $('#wizard').innerHTML=['방식','동작','확인','링크'].map((t,i)=>`<button class="${i+1===n?'cur':i+1<n?'done':''}" data-step="${i+1}" ${i+1<n&&n<4?'':'disabled'}>${i+1}. ${t}</button>`).join(''); $$('#wizard [data-step]').forEach(b=>b.addEventListener('click',()=>gotoStep(+b.dataset.step))); if(n===3){ updateCreateForm(); updatePreview(); } window.scrollTo({top:0}); }
+function gotoStep(n){ if(n<2) n=2; if(n>=3&&!currentMovement()) n=2; C.step=n; for(let i=2;i<=4;i++) $('#cstep'+i).hidden= i!==n; $('#wizard').innerHTML=['모범 동작','방식 고르기','링크 보내기'].map((t,i)=>{ const k=i+2; return `<button class="${k===n?'cur':k<n?'done':''}" data-step="${k}" ${k<n&&n<4?'':'disabled'}>${i+1}. ${t}</button>`; }).join(''); $$('#wizard [data-step]').forEach(b=>b.addEventListener('click',()=>gotoStep(+b.dataset.step))); if(n===3){ updateCreateForm(); updatePreview(); } window.scrollTo({top:0}); }
 function currentMovement(){ return C.custom? customMovement(C.custom) : MOVEMENTS[C.movement]; }
 function updateCreateForm(){ const mv=currentMovement(); if(!mv) return; const mug= C.mode==='game'&&C.game==='mugung';
   $('#goalRow').hidden=mug; $('#fGoalUnit').textContent= mv.type==='follow'? '(몇 번 따라 할까요)' : mv.type==='match'? '(몇 번 맞출까요)' : `(${goalUnit(mv)})`; if(!$('#fGoal').dataset.touched) $('#fGoal').value=defaultGoal(mv);
@@ -91,9 +87,14 @@ function updateCreateForm(){ const mv=currentMovement(); if(!mv) return; const m
   $('#fTitle').placeholder=`${mug?'무궁화 꽃이 피었습니다':mv.name} ${MODE_NAME[C.mode]}`;
   $('#optAssign').hidden= C.mode!=='assignment'; $('#optPractice').hidden= C.mode!=='practice'; $('#optExam').hidden= C.mode!=='exam'; $('#optExam2').hidden= C.mode!=='exam'; $('#optGame').hidden= C.mode!=='game'; $('#optOpen').hidden= C.mode==='exam'||C.mode==='game';
   const sv=store.get('mc4.prof',{}); if(!$('#fCourse').value&&sv.course) $('#fCourse').value=sv.course; if(!$('#fProf').value&&sv.prof) $('#fProf').value=sv.prof; }
-function updatePreview(){ const mv=currentMovement(); const box=$('#createPreview'); if(!mv){ box.innerHTML='<p class="note">동작을 먼저 골라 주세요.</p>'; return; } const mug= C.mode==='game'&&C.game==='mugung';
-  box.innerHTML=`<canvas class="figcv" id="pvCv"></canvas><div><h3 style="margin:0 0 8px">${esc(mug?'무궁화 꽃이 피었습니다':mv.name)}</h3><div class="modepick" id="pvModes" role="group" aria-label="방식">${Object.keys(MODE_NAME).filter(k=>k!=='game'||mug||raceOk(mv)).map(k=>`<button type="button" class="btn sm" data-mode="${k}" aria-pressed="${C.mode===k}">${MODE_SVG[k]} ${MODE_NAME[k]}</button>`).join('')}</div><p class="note" style="margin-top:8px">${mug?'"얼음!" 하면 멈추기. 움직이면 탈락':esc(MODE_DESC[C.mode])}</p>${mv.beta&&!mug?'<p class="note" style="margin-top:4px">시범 단계 동작입니다. 실제 영상으로 기준값을 더 맞춰야 합니다.</p>':''}</div>`;
-  $$('#pvModes [data-mode]').forEach(b=>b.addEventListener('click',()=>{ if(C.mode===b.dataset.mode) return; C.mode=b.dataset.mode; if(C.mode==='game'&&C.game==='mugung'&&mv) C.game='race'; updateCreateForm(); updatePreview(); gotoStep(3); }));
+function updatePreview(){ const mv=currentMovement(); const box=$('#createPreview'); if(!mv){ box.innerHTML='<p class="note">모범 동작을 먼저 정해 주세요.</p>'; return; } const mug= C.mode==='game'&&C.game==='mugung'; const grp= C.mode==='exam'?'assignment':C.mode;
+  box.innerHTML=`<canvas class="figcv" id="pvCv"></canvas><div><h3 style="margin:0 0 8px">${esc(mug?'무궁화 꽃이 피었습니다':mv.name)}</h3><div class="modepick" id="pvModes" role="group" aria-label="방식">${HOME_MODES.filter(([k])=>k!=='game'||mug||raceOk(mv)).map(([k,n])=>`<button type="button" class="btn" data-mode="${k}" aria-pressed="${grp===k}">${MODE_SVG[k]} ${n}</button>`).join('')}</div>
+    ${grp==='assignment'?`<label class="examrow"><input type="checkbox" id="fExam" ${C.mode==='exam'?'checked':''}><span><b>시험으로 진행</b><small>참여자에게 점수를 숨기고, 결과는 비밀번호로만 봅니다</small></span></label>`:''}
+    ${grp==='game'?`<div class="btns" id="gameKinds" style="margin-top:8px"><button type="button" class="btn sm" data-g="race" aria-pressed="${C.game==='race'}">정확하게 N번 먼저</button><button type="button" class="btn sm" data-g="mugung" aria-pressed="${C.game==='mugung'}">무궁화 꽃이 피었습니다</button></div>`:''}
+    <p class="note" style="margin-top:8px">${mug?'"얼음!" 하면 멈추기. 움직이면 탈락':esc(MODE_DESC[C.mode])}</p>${mv.beta&&!mug?'<p class="note" style="margin-top:4px">시범 단계 동작입니다. 실제 영상으로 기준값을 더 맞춰야 합니다.</p>':''}</div>`;
+  $$('#pvModes [data-mode]').forEach(b=>b.addEventListener('click',()=>{ const k=b.dataset.mode; if(grp===k) return; C.mode=k; if(k==='game'&&C.game==='mugung') C.game='race'; updateCreateForm(); updatePreview(); }));
+  const ex=$('#fExam'); if(ex) ex.addEventListener('change',()=>{ C.mode= ex.checked?'exam':'assignment'; updateCreateForm(); updatePreview(); if(ex.checked) $('#fPw').focus(); });
+  $$('#gameKinds [data-g]').forEach(b=>b.addEventListener('click',()=>{ C.game=b.dataset.g; updateCreateForm(); updatePreview(); }));
   const cv=$('#pvCv'); if(mug) mountScene(cv,'race'); else if(mv.tpl) mountModel(cv,mv,{label:'모범'}); else mountScene(cv, mv.custom? mv.template : mv.id, {cue:true}); }
 async function makeRoom(){ const mv=currentMovement(); if(!mv){ toast('동작을 먼저 고르세요'); gotoStep(2); return; } const mug= C.mode==='game'&&C.game==='mugung';
   if(C.mode==='exam'&&!$('#fPw').value.trim()){ toast('시험은 결과를 볼 때 쓸 비밀번호가 필요합니다'); $('#fPw').focus(); return; }

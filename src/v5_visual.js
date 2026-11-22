@@ -124,33 +124,28 @@ function mountModel(cv, mv, o = {}) { if (mv.kind === 'motion') return mountMoti
 
 /* ---------- 첫 화면의 사용법 안내: 양궁 동작 하나로 처음부터 끝까지(4장면) ---------- */
 const GUIDE = [
-  { title: '모범을 3번 찍는다', dur: 8, say: '교수님이 한 손을 들면 촬영이 시작됩니다. 모범 동작을 세 번 찍으면, 그 평균이 모범이 됩니다.' },
-  { title: '링크를 보낸다', dur: 6, say: '수업 실습, 과제, 시험, 게임 중 하나를 고르면 링크가 나옵니다. 학생들에게는 링크만 보내면 됩니다.' },
-  { title: '모범을 보며 따라 한다', dur: 8.4, say: '학생은 모범 동작을 보면서 그대로 따라 합니다. 다른 곳은 그 자리에서 말로 알려 줍니다.' },
-  { title: '결과가 모인다', dur: 6.5, say: '열 번 중 몇 번 맞았는지, 어디가 달랐는지 바로 나옵니다. 교수님 화면에는 모든 학생의 결과가 모입니다.' },
+  { title: '모범 영상을 올린다', dur: 8, say: '교수님이 모범 동작을 찍은 영상을 올립니다. 인공지능이 영상 속 동작을 읽어서 모범으로 등록합니다.' },
+  { title: '링크를 보낸다', dur: 6, say: '연습, 과제와 시험, 게임 중 하나를 고르면 링크가 나옵니다. 학생들에게는 링크만 보내면 됩니다.' },
+  { title: '모범을 보며 따라 한다', dur: 8.4, say: '학생은 폰으로 링크를 열고, 모범 동작을 보면서 그대로 따라 합니다. 모범과 맞을 때만 횟수가 올라가고, 다른 곳은 그 자리에서 말로 알려 줍니다.' },
+  { title: '결과가 모인다', dur: 6.5, say: '열 번 중 몇 번 맞았는지, 어디가 달랐는지 바로 나옵니다. 교수님 화면에는 학생들의 결과가 모입니다.' },
 ];
 const GUIDE_STEPS = GUIDE.map((g) => g.title);
 /** 안내 한 장면을 그린다. i: 장면 번호, q: 그 장면의 진행(0~1) */
 function guideDraw(c, w, h, i, q) {
   paintBg(c, w, h); const U = Math.min(w, h * 1.5) / 100; const F = (px, wt = 800) => { c.font = `${wt} ${px}px ${gfont()}`; }; const T = (s, x, y, o = {}) => { F(o.size || 12, o.weight || 800); c.fillStyle = o.color || '#fff'; c.textAlign = o.align || 'left'; c.textBaseline = o.base || 'middle'; c.fillText(s, x, y); };
   const seg = (a, b) => Math.max(0, Math.min(1, (q - a) / (b - a)));
-  if (i === 0) { // 한 손 들기 → 3·2·1 → 양궁 동작 3번 → 평균이 모범으로
-    const box = { x: w * 0.2, y: h * 0.03, w: w * 0.6, h: h * 0.8 }; const m = U * 5, L = U * 6;
-    c.strokeStyle = 'rgba(255,255,255,.55)'; c.lineWidth = 2.5; for (const [cx, cy, sx, sy] of [[m, m, 1, 1], [w - m, m, -1, 1], [m, h - m, 1, -1], [w - m, h - m, -1, -1]]) { c.beginPath(); c.moveTo(cx + sx * L, cy); c.lineTo(cx, cy); c.lineTo(cx, cy + sy * L); c.stroke(); }
-    const takes = [[0.28, 0.55], [0.57, 0.71], [0.73, 0.87]]; const cur = takes.findIndex(([a, b]) => q >= a && q < b); const doneN = takes.filter(([, b]) => q >= b).length; const saved = q >= 0.89;
-    let lm, label, bg = 'rgba(4,8,18,.66)';
-    if (q < 0.13) { lm = lerpPose(standPose(), handUpPose(), ease01(q / 0.07)); label = '한 손을 들면 시작'; }
-    else if (q < 0.28) { lm = lerpPose(handUpPose(), standPose(), ease01((q - 0.13) / 0.07)); label = '준비…'; const nnum = 3 - Math.min(2, Math.floor((q - 0.13) / 0.05)); T(String(nnum), w * 0.8, h * 0.44, { size: Math.max(40, U * 20), weight: 900, align: 'center' }); }
-    else if (cur >= 0) { const [a, b] = takes[cur]; lm = archeryShot((q - a) / (b - a)); label = `모범 동작 찍는 중 · ${cur + 1}번째`; }
-    else if (saved) { lm = archeryPose(); label = '세 번의 평균 = 모범'; bg = GOOD_BG; }
-    else { lm = standPose(); label = `${doneN}번 찍었어요`; }
-    if (saved) { const fm = drawFigure(c, lm, box, { ar: 0.75, color: INK.good, dash: [6, 6], floor: false }); drawBow(c, fm, lm, { alpha: 0.5 }); c.strokeStyle = INK.good; c.lineWidth = Math.max(3, U); c.lineCap = 'round'; const cx = w * 0.8, cy = h * 0.42, r = U * 5; c.beginPath(); c.moveTo(cx - r, cy); c.lineTo(cx - r * 0.25, cy + r * 0.7); c.lineTo(cx + r, cy - r * 0.8); c.stroke(); }
-    else { const fm = drawFigure(c, lm, box, { ar: 0.75 }); if (cur >= 0) drawBow(c, fm, lm); }
-    if (cur >= 0) { c.fillStyle = '#ff4d6d'; c.beginPath(); c.arc(m + U * 2.4, m + U * 3.6, U * 1.5, 0, Math.PI * 2); c.fill(); T('REC', m + U * 5.4, m + U * 3.8, { size: Math.max(11, U * 3.2), weight: 900 }); }
-    for (let k = 0; k < 3; k++) { c.fillStyle = k < doneN ? INK.good : 'rgba(255,255,255,.22)'; c.beginPath(); c.arc(w - m - U * 2.5 - (2 - k) * U * 4.6, m + U * 3.6, U * 1.5, 0, Math.PI * 2); c.fill(); }
-    chip(c, label, w / 2, h - m - U * 1.5, { size: Math.max(13, U * 3.6), bg });
+  if (i === 0) { // 찍어 둔 영상을 올린다 → AI가 동작을 읽는다 → 모범으로 등록
+    const m = U * 4; const read = seg(0.42, 0.8), saved = q >= 0.84;
+    const fx = w * 0.19, fy = m, fw = w * 0.62, fh = h - m * 2 - U * 11; const box = { x: fx, y: fy + U * 2, w: fw, h: fh - U * 8 }; c.fillStyle = 'rgba(255,255,255,.04)'; c.strokeStyle = saved ? INK.good : 'rgba(255,255,255,.3)'; c.lineWidth = 2; rrect(c, fx, fy, fw, fh, U * 3); c.fill(); c.stroke(); // 영상 틀
+    const lm = saved ? archeryPose() : archeryShot((q / 0.84 * 2) % 1);
+    if (!saved) { const fm = drawFigure(c, lm, box, { ar: 0.75, alpha: 1 - read * 0.55 }); drawBow(c, fm, lm, { alpha: 1 - read * 0.55 }); }
+    if (read > 0 || saved) { const fm = drawFigure(c, lm, box, { ar: 0.75, color: INK.good, dash: [6, 6], floor: false, alpha: saved ? 1 : read }); if (saved) drawBow(c, fm, lm, { alpha: 0.5 }); }
+    if (read > 0 && read < 1) { const sy = fy + fh * read; const g = c.createLinearGradient(0, sy - U * 8, 0, sy); g.addColorStop(0, 'rgba(47,208,138,0)'); g.addColorStop(1, 'rgba(47,208,138,.35)'); c.fillStyle = g; c.fillRect(fx + 2, sy - U * 8, fw - 4, U * 8); c.fillStyle = INK.good; c.fillRect(fx + 2, sy, fw - 4, 2); } // 읽어 내려가는 선
+    if (!saved) { c.fillStyle = 'rgba(255,255,255,.2)'; rrect(c, fx + U * 4, fy + fh - U * 4, fw - U * 8, U * 1.2, U); c.fill(); c.fillStyle = '#fff'; rrect(c, fx + U * 4, fy + fh - U * 4, (fw - U * 8) * ((q / 0.84 * 2) % 1), U * 1.2, U); c.fill(); c.fillStyle = '#fff'; c.beginPath(); c.moveTo(fx + U * 4, fy + U * 3.4); c.lineTo(fx + U * 4, fy + U * 7.4); c.lineTo(fx + U * 7.4, fy + U * 5.4); c.closePath(); c.fill(); T('찍어 둔 영상', fx + U * 9.4, fy + U * 5.6, { size: Math.max(11, U * 3.2), weight: 800, color: '#dfe6f1' }); }
+    else { c.strokeStyle = INK.good; c.lineWidth = Math.max(3, U); c.lineCap = 'round'; const cx = fx + fw - U * 8, cy = fy + U * 8, r = U * 3.4; c.beginPath(); c.moveTo(cx - r, cy); c.lineTo(cx - r * 0.25, cy + r * 0.7); c.lineTo(cx + r, cy - r * 0.8); c.stroke(); }
+    chip(c, saved ? '모범 동작으로 등록' : read > 0 ? 'AI가 동작을 읽는 중' : '모범 영상을 올립니다', w / 2, h - m - U * 3.6, { size: Math.max(13, U * 3.6), bg: saved ? GOOD_BG : 'rgba(4,8,18,.78)' });
   } else if (i === 1) { // 방식 고르기 → 링크 하나가 여러 폰으로
-    const modes = ['수업 실습', '과제', '시험', '게임']; const cw = w * 0.2, gap = w * 0.02, x0 = (w - (cw * 4 + gap * 3)) / 2, cy = h * 0.17, ch = Math.max(26, U * 9); const picked = q > 0.12;
+    const modes = ['연습', '과제·시험', '게임']; const cw = w * 0.24, gap = w * 0.025, x0 = (w - (cw * 3 + gap * 2)) / 2, cy = h * 0.17, ch = Math.max(26, U * 9); const picked = q > 0.12;
     modes.forEach((mname, k) => { const x = x0 + k * (cw + gap); const on = k === 0 && picked; c.fillStyle = on ? INK.red : 'rgba(255,255,255,.08)'; c.strokeStyle = on ? INK.red : 'rgba(255,255,255,.2)'; c.lineWidth = 1.5; rrect(c, x, cy - ch / 2, cw, ch, U * 2.4); c.fill(); c.stroke(); T(mname, x + cw / 2, cy + 0.5, { size: Math.max(11, U * 3.2), weight: 800, align: 'center', color: on ? '#fff' : '#c5cfdd' }); });
     if (q > 0.04 && q < 0.2) { const u = seg(0.04, 0.2); c.strokeStyle = `rgba(255,255,255,${0.7 * (1 - u)})`; c.lineWidth = 2; c.beginPath(); c.arc(x0 + cw / 2, cy, U * (3 + 9 * u), 0, Math.PI * 2); c.stroke(); }
     const cx = w / 2, top = h * 0.42; const lu = seg(0.24, 0.34);

@@ -4,7 +4,7 @@ WORKDIR /app
 COPY package.json ./
 # pg(PostgreSQL 연결 부품)만 설치한다. 설치에 실패해도 서버는 파일 저장으로 켜진다.
 RUN npm install --omit=dev --no-audit --no-fund || true
-COPY server.js index.html ./
+COPY server.js index.html version.txt ./
 COPY vendor ./vendor
 COPY media ./media
 ENV PORT=8000

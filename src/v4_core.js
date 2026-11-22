@@ -1,5 +1,5 @@
 /* ================= 코어: 상태·서버·카메라·세션·그리기·결과 ================= */
-const APP_VERSION='v6.0 · 2026-11-19';
+const APP_VERSION='v7.0 · 2026-11-22'; const BUILD=7001; // BUILD: 올릴 때마다 올린다. version.txt 와 견줘 예전 화면이 남아 있으면 저절로 새로 고친다
 const SERVER_DEFAULT=''; // 비워 두면 같은 주소의 /api(기록 서버)를 자동으로 찾는다. 다른 주소의 기록 서버를 쓰려면 여기에 적는다.
 // 자세 인식 파일은 이 프로그램과 같은 곳(vendor 폴더)에서 먼저 찾는다. 없을 때만 바깥 주소에서 받는다.
 const MP_VER='0.10.14'; const MP_LOCAL='./vendor/mediapipe'; const MP_CDN=`https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${MP_VER}`;
@@ -14,8 +14,8 @@ async function copyText(text){ try{ await navigator.clipboard.writeText(text); r
 const uid=(n=8)=>{ const c='abcdefghjkmnpqrstuvwxyz23456789'; let s=''; for(let i=0;i<n;i++) s+=c[Math.floor(Math.random()*c.length)]; return s; };
 const b64e=(s)=>btoa(unescape(encodeURIComponent(s))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); const b64d=(s)=>decodeURIComponent(escape(atob(s.replace(/-/g,'+').replace(/_/g,'/'))));
 const IN_ARTIFACT=/claude\.ai$/.test(location.hostname); const HOSTED=location.origin.startsWith('http')&&!IN_ARTIFACT;
-const MODE_NAME={practice:'수업 실습',assignment:'과제',exam:'시험',game:'게임'};
-const MODE_DESC={practice:'모범을 보며 따라 하는 동안 목소리로 바로 교정. 결과는 만든 사람 화면에 모입니다.',assignment:'찍어서 제출하면 점수와 리포트를 함께 받습니다.',exam:'학생에게 점수를 보여 주지 않고, 찍은 것 중 하나를 골라 제출합니다. 비밀번호로 보호됩니다.',game:'정확한 동작을 누가 먼저 채우나. 링크에 들어온 모두가 함께 겨룹니다.'};
+const MODE_NAME={practice:'연습',assignment:'과제',exam:'시험',game:'게임'};
+const MODE_DESC={practice:'모범을 보며 따라 하는 동안 목소리로 바로 교정. 결과는 만든 사람 화면에 모입니다.',assignment:'참여자가 따라 하는 모습을 찍어 제출합니다. 결과는 만든 사람만 봅니다.',exam:'참여자에게 점수를 보여 주지 않고, 찍은 것 중 하나를 골라 제출합니다. 결과는 비밀번호로 보호됩니다.',game:'모범과 맞는 동작을 누가 먼저 채우나 겨룹니다. 캐릭터가 달리고 순위가 매겨집니다.'};
 const MODE_ICON={practice:'🗣️',assignment:'📤',exam:'🔒',game:'🏁'}; const MODE_HINT={practice:'바로 교정',assignment:'찍어서 제출',exam:'점수 숨김',game:'다 같이 시합'};
 const S={ server: store.get('mc4.server',SERVER_DEFAULT), room:null, roomId:null, adminKey:null, role:null, student:{name:'',id:''},
   landmarker:null, numPoses:1, loadingPromise:null, stream:null, facing:'user', mirrored:false, running:false, rafId:null, usingVFC:false, lastTs:0, source:null,

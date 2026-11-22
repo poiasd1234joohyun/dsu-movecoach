@@ -197,6 +197,23 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--su
 .bigmode[aria-pressed="true"]{border-color:var(--dsu);box-shadow:0 0 0 3px var(--dsu-soft)} .bigmode[aria-pressed="false"].practice{background:var(--surface);color:inherit;border-color:var(--line)} .bigmode[aria-pressed="false"].practice .mi{background:var(--surface-2);color:var(--navy)} .bigmode[aria-pressed="false"].practice .mh{color:var(--muted)}
 .bigmode[aria-pressed="true"]:not(.practice){background:var(--dsu-soft)}
 .morelink{font-size:.86rem;font-weight:700;margin-left:10px;text-decoration:none}
+.bigmodes.three{grid-template-columns:repeat(3,1fr)} @media (max-width:760px){ .bigmodes.three{grid-template-columns:1fr} .bigmodes.three .bigmode{min-height:0;flex-direction:row;align-items:center;gap:12px;flex-wrap:wrap} .bigmodes.three .bigmode .mi{margin:0} .bigmodes.three .bigmode .mh{flex-basis:100%;margin-left:56px;margin-top:-8px} }
+.linklike{background:none;border:0;padding:0;color:var(--dsu);font-weight:700;text-decoration:underline;font-size:inherit}
+.btn.file{position:relative;overflow:hidden;cursor:pointer} .btn.file input{position:absolute;inset:0;opacity:0;cursor:pointer;font-size:0}
+.herolead b{color:var(--fg)}
+.vm{display:flex;flex-direction:column;gap:10px}
+.vmstage{position:relative;background:var(--stage);border-radius:14px;overflow:hidden;max-height:36vh;margin-inline:auto;width:100%;max-width:520px;aspect-ratio:16/9}
+.vmstage video{display:block;width:100%;height:100%;object-fit:contain;background:var(--stage)} .vmstage canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none}
+.vmprog{position:absolute;left:10px;right:10px;bottom:10px;height:6px;border-radius:3px;background:rgba(255,255,255,.25);overflow:hidden} .vmprog i{display:block;height:100%;width:0;background:#3fd68f}
+.vmrange{display:grid;grid-template-columns:1fr 1fr;gap:12px} .vmrange input[type=range]{width:100%;accent-color:var(--dsu);min-height:32px} .vmrange label b{font-variant-numeric:tabular-nums;color:var(--dsu)} @media (max-width:520px){ .vmrange{grid-template-columns:1fr} }
+.examrow{display:flex;gap:10px;align-items:flex-start;margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;cursor:pointer} .examrow input{width:20px;height:20px;margin-top:2px;accent-color:var(--dsu);flex:none} .examrow small{display:block;color:var(--muted);font-size:.84rem}
+.modepick .btn[aria-pressed="true"]{background:var(--dsu);color:#fff;border-color:var(--dsu)}
+.fieldcards{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin-top:14px} @media (max-width:820px){ .fieldcards{grid-template-columns:1fr} }
+.fieldcard{display:grid;grid-template-columns:120px 1fr;gap:14px;border:1px solid var(--line);border-radius:16px;padding:14px;background:var(--surface)} .fieldcard h3{font-size:1.06rem;font-weight:800;margin-bottom:6px}
+.fieldcard ul{margin:2px 0 8px;padding-left:18px;font-size:.92rem} .fieldcard ul.next{color:var(--muted)} .fl{margin:0;font-size:.78rem;font-weight:800} .fl.now{color:var(--good)} .fl.next{color:var(--warn)}
+.tuts{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px} .tut{margin:0} .tut video,.tut iframe{display:block;width:100%;aspect-ratio:16/9;border:0;border-radius:12px;background:var(--stage)} .tut figcaption{padding:6px 2px 0;font-size:.92rem} .tut figcaption span{display:block;color:var(--muted);font-size:.84rem}
+.sharebox{margin-top:10px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--bg-2);font-size:.92rem} .sharebox p{margin:0 0 8px}
+.startbar{position:sticky;bottom:0;z-index:5;background:var(--bg);padding:10px 0 12px;margin-top:4px}
 .scenes{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}
 @media (max-width:960px){ .scenes{grid-template-columns:repeat(4,1fr)} } @media (max-width:520px){ .scenes{grid-template-columns:repeat(3,1fr)} }
 .scene{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:6px;display:flex;flex-direction:column;gap:6px;min-width:0;transition:border-color .12s,transform .12s}
@@ -230,6 +247,7 @@ details.more{margin-top:12px;border-top:1px solid var(--line);padding-top:10px} 
 .shot[aria-pressed="true"]{border-color:var(--good);color:var(--good)} .shot[aria-pressed="false"]{opacity:.55}
 /* 참여 화면 */
 .roomhead{display:grid;grid-template-columns:104px 1fr;gap:12px;align-items:center}
+.roomhead.nofig{grid-template-columns:1fr} .roomhead.nofig>.figcv{display:none}
 .modelbox{display:grid;grid-template-columns:minmax(140px,220px) 1fr;gap:14px;align-items:center} @media (max-width:520px){ .modelbox{grid-template-columns:1fr} .modelbox canvas{max-width:240px;margin-inline:auto} }
 .earnote{margin:10px 0 0;font-size:.88rem;font-weight:700;background:var(--warn-soft);color:var(--warn);padding:8px 10px;border-radius:10px;display:flex;align-items:center;gap:8px}
 #rmBoard td{padding:6px 8px} #rmBoard .me td{background:var(--accent-soft)}
@@ -318,34 +336,36 @@ footer p{margin:4px 0}
 </head>
 <body>
 <header class="topbar"><div class="wrap">
-  <a class="logo" href="#home" id="logoLink"><img alt="동서대학교" src="data:image/png;base64,__DSULOGO__"><div class="t"><b>DSU 무브코치</b><span>모범 동작을 찍으면, 모두가 따라 한다</span></div></a>
-  <nav class="main" id="mainNav"><a href="#home" data-nav="home">소개</a><a href="#try" data-nav="try">1분 체험</a><a href="#depts" data-nav="depts">우리 학과는?</a><a href="#create" data-nav="create">링크 만들기</a><a href="#rooms" data-nav="rooms">내 링크</a><a href="#help" data-nav="help">도움말</a></nav>
+  <a class="logo" href="#home" id="logoLink"><img alt="동서대학교" src="data:image/png;base64,__DSULOGO__"><div class="t"><b>DSU 무브코치</b><span>모범 동작 영상을 올리면, 따라 하며 배운다</span></div></a>
+  <nav class="main" id="mainNav"><a href="#home" data-nav="home">홈</a><a href="#create" data-nav="create">모범 올리기</a><a href="#rooms" data-nav="rooms">내 링크</a><a href="#help" data-nav="help">사용법</a><a href="#depts" data-nav="depts">활용 분야</a></nav>
 </div><div class="redbar"></div></header>
 <main class="wrap" id="main">
 <!-- 홈: 글은 줄이고 그림으로 -->
 <section id="view-home">
   <div class="hero2">
-    <div class="herotext"><h1>모범 동작을 찍으면,<br>모두가 따라 합니다</h1>
-      <p class="herolead">교수님이 동작을 3번 찍으면 링크가 나옵니다. 학생은 그 링크에서 모범을 보며 따라 하고, 몇 번 맞았는지와 어디가 달랐는지를 바로 받습니다.</p>
-      <div class="btns"><a class="btn primary big" href="#create" id="heroMake">모범 동작 찍기</a><a class="btn big" href="#try">먼저 구경하기</a></div>
-      <ul class="herofacts"><li><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>로그인 없음</li><li><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>설치 없음</li><li><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>외부 AI를 부르지 않음</li></ul></div>
-    <div class="gbox"><div class="gtop"><span>사용법 30초</span><button type="button" class="gsound" id="guideSound" aria-pressed="false">소리로 설명 듣기</button></div>
-      <canvas id="guideCv" aria-label="사용법 안내: 교수님이 모범 동작을 세 번 찍고, 링크를 보내면, 학생이 모범을 보며 따라 하고, 결과가 모입니다"></canvas><video id="guideVideo" controls playsinline preload="metadata" hidden></video><div class="gsteps" id="guideSteps"></div></div>
+    <div class="herotext"><h1>모범 동작 영상을 올리면,<br>학생들이 따라 하며 배웁니다</h1>
+      <p class="herolead">교수님이 정확한 동작을 찍어 올리면, 그 영상이 <b>기준(모범)</b>이 됩니다. 학생은 받은 링크를 폰으로 열어 따라 하고, <b>모범과 맞을 때만</b> 횟수와 점수가 올라갑니다.</p>
+      <div class="btns"><label class="btn primary big file"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4M12 4L8 8M12 4l4 4"/><path d="M4 14v4a2 2 0 002 2h12a2 2 0 002-2v-4"/></svg> 모범 영상 올리기<input type="file" id="homeFile" accept="video/*,image/*" multiple></label><button type="button" class="btn big" id="heroDemo">예시로 먼저 보기</button></div>
+      <ul class="herofacts"><li><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>로그인·설치 없음</li><li><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>영상은 기기 밖으로 나가지 않음</li><li><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>외부 AI를 부르지 않음</li></ul></div>
+    <div class="gbox"><div class="gtop"><span>이렇게 씁니다</span><button type="button" class="gsound" id="guideSound" aria-pressed="false">소리로 설명 듣기</button></div>
+      <canvas id="guideCv" aria-label="사용법 안내: 모범 영상을 올리고, 링크를 보내면, 학생이 모범을 보며 따라 하고, 결과가 모입니다"></canvas><video id="guideVideo" controls playsinline preload="metadata" hidden></video><div class="gsteps" id="guideSteps"></div></div>
   </div>
-  <div class="sec modesec" style="margin-top:6px"><h2>어떻게 쓸까요?</h2><div class="bigmodes" id="homeModes"></div></div>
-  <div class="sec"><h2>이런 수업에 쓰입니다 <a class="morelink" href="#depts">우리 학과는?</a></h2><div class="scenes" id="homeScenes"></div></div>
-  <div class="trybox" id="trySec"><h2>먼저 구경하기</h2><div class="trycards" id="tryCards"></div></div>
+  <div class="sec modesec" style="margin-top:6px"><h2>올린 모범은 세 가지로 씁니다</h2><div class="bigmodes three" id="homeModes"></div>
+    <p class="note" style="margin-top:10px">결과는 링크를 만든 사람만 봅니다. <button type="button" class="linklike" id="heroAdmin">만든 사람이 보는 화면 예시</button></p></div>
+  <div class="sec" id="homeTut" hidden><h2>사용법 영상 <a class="morelink" href="#help">모두 보기</a></h2><div class="tuts" id="homeTutList"></div></div>
+  <div class="sec"><h2>이런 동작에 씁니다 <a class="morelink" href="#depts">활용 분야</a></h2><div class="scenes" id="homeScenes"></div></div>
 </section>
 <!-- 학과별 -->
 <section id="view-depts" hidden>
-  <div class="sec" style="margin-top:0"><h2>우리 학과는 어떻게 쓰나요?</h2><p class="lead">학과를 누르면 교정 전·후 그림으로 보여 드립니다.</p><p class="legend" id="deptLegend"></p><div class="colleges" id="colleges"></div></div>
+  <div class="sec" style="margin-top:0"><h2>활용 분야</h2><p class="lead">지금은 한 가지에 집중합니다. <b>모범 동작을 올리면, 따라 한다.</b> 어깨·팔꿈치·손목·엉덩이·무릎·발목처럼 몸의 큰 관절이 움직이는 동작이면 어느 과목이든 같은 방식으로 씁니다.</p>
+    <div class="fieldcards" id="fieldCards"></div>
+    <p class="note" style="margin-top:12px">"앞으로의 발전 과제"는 지금 쓰는 인식기(몸의 관절 33곳)로는 볼 수 없는 것입니다. 얼굴·손·물체를 보는 인식기를 더해야 합니다. 폰 카메라 한 대의 추정값이므로 수업·연습용 교정 도구이며, 정밀 측정 장비가 아닙니다.</p></div>
 </section>
 <!-- 만들기 -->
 <section id="view-create" hidden><div class="panel narrow">
   <div class="wizard" id="wizard"></div>
-  <div class="card" id="cstep1"><h2>어떻게 쓸까요?</h2><div class="bigmodes" id="modeTiles"></div></div>
-  <div class="card" id="cstep2" hidden><h2 id="step2Title">어떤 동작을 할까요?</h2><div class="btns" id="gameKinds" style="margin-bottom:12px" hidden></div><div class="mtiles" id="makeTiles"></div><h3 class="subh" id="moveTitle">준비된 동작에서 고르기</h3><div class="mtiles" id="moveTiles"></div><details class="more" id="moreMake"><summary>다른 방법으로 동작 만들기</summary><div class="btns" style="margin-top:10px"><button class="btn" id="btnNewMove">시범 영상으로 반복 동작 만들기 (스쿼트·푸시업 같은 되풀이 동작의 깊이 기준)</button></div></details></div>
-  <div class="card" id="cstep3" hidden><h2>확인하고 만들기</h2>
+  <div class="card" id="cstep2"><h2 id="step2Title">모범 동작을 정합니다</h2><div class="mtiles" id="makeTiles"></div><h3 class="subh" id="moveTitle">영상이 없으면: 준비된 동작 쓰기</h3><div class="mtiles" id="moveTiles"></div><details class="more" id="moreMake"><summary>다른 방법으로 모범 만들기</summary><div class="btns" style="margin-top:10px"><button class="btn" id="btnCamModel">지금 이 기기의 카메라로 찍기 (한 손 신호로 3번)</button></div></details></div>
+  <div class="card" id="cstep3" hidden><h2>어떻게 쓸지 고르고 링크 만들기</h2>
     <div class="pv" id="createPreview"></div>
     <div class="grid2" style="margin-top:12px"><div class="field"><label for="fCourse">수업·모임 이름 (선택)</label><input type="text" id="fCourse" maxlength="40" placeholder="예: 웨이트트레이닝1, 3조"></div>
       <div class="field" id="goalRow"><label for="fGoal">목표 <span id="fGoalUnit"></span></label><input type="number" id="fGoal" min="1" max="300" value="10" inputmode="numeric"></div>
@@ -354,7 +374,7 @@ footer p{margin:4px 0}
       <div class="field" id="optGame" hidden><label for="fPlayers">인원</label><select id="fPlayers"><option value="1">각자 폰으로 (전체 순위)</option><option value="2">둘이 한 카메라로</option></select></div></div>
     <details class="more"><summary>더 설정</summary>
       <div class="grid2" style="margin-top:10px"><div class="field"><label for="fTitle">과제 이름</label><input type="text" id="fTitle" maxlength="60"></div><div class="field"><label for="fProf">만든 사람 이름 (선택)</label><input type="text" id="fProf" maxlength="20"></div>
-        <div class="field"><label for="fDue">마감 (선택)</label><input type="datetime-local" id="fDue"></div><div class="field"><label for="fDemo">모범 영상 링크 (선택, YouTube)</label><input type="url" id="fDemo" placeholder="https://youtu.be/…"></div></div>
+        <div class="field"><label for="fDue">마감 (선택)</label><input type="datetime-local" id="fDue"></div><div class="field"><label for="fDemo">참여자에게 보여 줄 실제 영상 주소 (선택, YouTube)</label><input type="url" id="fDemo" placeholder="https://youtu.be/…"></div></div>
       <div class="field" style="margin-top:10px"><label for="fNotes">참여자에게 보일 안내 (선택)</label><textarea id="fNotes" maxlength="300" placeholder="예: 옆에서 전신이 보이게 촬영하세요."></textarea></div>
       <div id="optOpen" style="margin-top:8px"><div class="toggle"><span>참여자끼리 기록 보기 (조별·동아리) <small>켜면 링크를 가진 사람은 서로의 이름과 점수를 봅니다.</small></span><label class="switch"><input type="checkbox" id="fOpen"><i></i></label></div></div>
       <div id="optAssign"><div class="toggle"><span>영상도 함께 제출받기 <small>끄면 횟수·점수·각도만 전송됩니다.</small></span><label class="switch"><input type="checkbox" id="fVideo" checked><i></i></label></div></div>
@@ -362,7 +382,7 @@ footer p{margin:4px 0}
       <div id="optExam2" hidden><div class="grid2" style="margin-top:8px"><div class="field"><label for="fTakes">촬영 허용 횟수</label><select id="fTakes"><option value="1">1회</option><option value="2">2회</option><option value="3" selected>3회</option><option value="5">5회</option><option value="99">제한 없음</option></select></div><div class="field"><label for="fRelease">점수 공개</label><select id="fRelease"><option value="0" selected>비공개 (만든 사람만)</option><option value="1">제출 후 학생에게도 공개</option></select></div></div>
         <div class="toggle" style="margin-top:6px"><span>얼굴이 보이는 영상만 제출 허용 <small>대리 수행 방지. 몸과 얼굴이 함께 잡혀야 합니다.</small></span><label class="switch"><input type="checkbox" id="fFace" checked><i></i></label></div></div>
     </details>
-    <div class="btns" style="margin-top:14px"><button class="btn primary big" id="btnMakeRoom">링크 만들기</button><button class="btn" id="btnBack2">← 동작 다시 고르기</button></div></div>
+    <div class="btns" style="margin-top:14px"><button class="btn primary big" id="btnMakeRoom">링크 만들기</button><button class="btn" id="btnTryModel">먼저 내가 따라 해 보기</button><button class="btn" id="btnBack2">← 모범 다시 정하기</button></div></div>
   <div class="card" id="cstep4" hidden><h2>완료 — 링크를 보내세요</h2>
     <div class="outgrid"><div id="qr" hidden></div><div>
       <div class="field"><label>참여 링크 (단톡·이클래스에 붙여넣기)</label><div class="linkbox"><input type="text" id="outStudent" readonly class="num"><button class="btn primary" id="btnCopyStudent">복사</button></div></div>
@@ -376,7 +396,8 @@ footer p{margin:4px 0}
 <section id="view-room" hidden><div class="layout"><div class="panel">
   <div class="card"><div class="roomhead"><canvas class="figcv" id="rmFig"></canvas><div><span class="mode" id="rmMode">연습</span><h2 id="rmTitle" style="font-size:1.15rem;margin:6px 0 2px">과제</h2><p class="note" id="rmMeta"></p><p class="note" id="rmHow" style="margin-top:6px"></p></div></div>
     <div id="rmVideo" style="margin-top:10px" hidden></div><div id="rmNotes" class="callout" style="margin-top:10px" hidden></div></div>
-  <div class="card" id="rmModelCard" hidden><h2>먼저 모범을 보세요</h2><div class="modelbox"><canvas class="figcv" id="rmModel"></canvas><p class="note" id="rmModelNote" style="font-size:.92rem"></p></div></div>
+  <div class="card" id="rmModelCard" hidden><h2>먼저 모범 동작을 보세요</h2><div class="modelbox"><canvas class="figcv" id="rmModel"></canvas><p class="note" id="rmModelNote" style="font-size:.92rem"></p></div></div>
+  <div class="card"><h2>이렇게 준비하세요</h2><ol style="margin:0;padding-left:20px;font-size:.9rem;color:var(--muted)"><li>폰을 세워 두고 화면이 나를 향하게</li><li id="rmTip2">2~3m 떨어진 옆(측면)에서 전신이 보이게. 테두리가 초록색이 되면 준비 완료</li><li id="rmTip3">셋을 세면 시작. 목표를 채우거나 <b>두 손을 머리 위로</b> 들면 끝</li></ol><h3 class="subh" id="rmPointsTitle" style="margin-top:14px">이것만 기억하세요</h3><ul id="rmPoints" style="margin:0;padding-left:20px"></ul><p class="note" id="rmSetup" style="margin-top:8px"></p></div>
   <div class="card"><h2>시작하기</h2><div class="grid2"><div class="field"><label for="sName">이름</label><input type="text" id="sName" autocomplete="name" maxlength="20"></div><div class="field" id="sIdRow"><label for="sId">학번</label><input type="text" id="sId" inputmode="numeric" maxlength="20"></div></div>
     <div id="rmGameOpts" style="margin-top:12px" hidden><div class="field"><label>내 캐릭터</label><div class="charpick" id="gChars"></div></div><div class="field" id="gChars2Row" style="margin-top:10px" hidden><label>상대 캐릭터</label><div class="charpick" id="gChars2"></div></div></div>
     <p class="earnote" id="rmEar" hidden><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 14v-2a7.5 7.5 0 0115 0v2"/><rect x="3" y="13.5" width="4.5" height="6.5" rx="1.8"/><rect x="16.5" y="13.5" width="4.5" height="6.5" rx="1.8"/></svg>이어폰을 끼면 숫자와 멘트가 나에게만 들려요</p>
@@ -384,8 +405,6 @@ footer p{margin:4px 0}
   <div class="card" id="rmTakesCard" hidden><h2>내 촬영 <small>점수는 표시되지 않습니다. 제출 가능 여부만 확인하고 하나를 골라 제출하세요.</small></h2><div class="takes" id="takes"></div><div class="btns" style="margin-top:10px"><button class="btn primary big" id="btnSubmitTake" disabled>선택한 영상 제출</button><button class="btn" id="btnNewTake">다시 촬영</button></div><p class="note" id="takesNote" style="margin-top:8px"></p></div>
   <div class="card" id="rmBoardCard" hidden><h2><span id="rmBoardTitle">함께한 사람들</span> <button class="btn sm" id="rmBoardRefresh" style="float:right">새로고침</button></h2><div class="tablewrap"><table id="rmBoard"><tbody></tbody></table></div></div>
 </div><aside class="panel">
-  <div class="card"><h2 id="rmPointsTitle">이것만 기억하세요</h2><ul id="rmPoints" style="margin:0;padding-left:20px"></ul><p class="note" id="rmSetup" style="margin-top:8px"></p></div>
-  <div class="card"><h2>촬영 요령</h2><ol style="margin:0;padding-left:20px;font-size:.9rem;color:var(--muted)"><li>폰을 세워 두고 화면이 나를 향하게</li><li id="rmTip2">2~3m 떨어진 옆(측면)에서 전신이 보이게. 테두리가 초록색이 되면 준비 완료</li><li id="rmTip3">셋을 세면 시작. 목표를 채우거나 <b>두 손을 머리 위로</b> 들면 끝</li></ol></div>
   <div class="card" id="rmMyCard" hidden><h2>내 결과 다시 보기</h2><p class="note">제출 뒤 받은 접수번호로 피드백을 볼 수 있습니다.</p><div class="linkbox" style="margin-top:8px"><input type="text" id="myCode" placeholder="접수번호"><button class="btn" id="btnMyResult">보기</button></div></div>
 </aside></div></section>
 <!-- 무대 -->

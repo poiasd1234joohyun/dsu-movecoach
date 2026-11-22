@@ -75,10 +75,63 @@ function takeFromVideo(file){ return new Promise((res)=>{ const v=document.creat
   const step=()=>{ if(done) return; if(v.ended||v.error){ finish(); return; } if(v.readyState>=2&&v.videoWidth&&v.currentTime<=MOTION_MAX+1){ const lm=detectOn(v,1); if(lm) fr.push(motionFrame(lm,v.videoWidth,v.videoHeight,v.currentTime*1000)); } else if(v.currentTime>MOTION_MAX+1){ finish(); return; } ('requestVideoFrameCallback' in v)? v.requestVideoFrameCallback(step) : requestAnimationFrame(step); };
   v.onended=finish; v.onerror=finish; v.play().then(step).catch(finish); setTimeout(finish,60000); }); }
 
+/* ---------- 모범 영상 올리기: 찍어 둔 영상 → AI가 동작을 읽음 → 구간 확인 → 모범 ---------- */
+const VIDEO_MAX=60; // 읽는 가장 긴 길이(초)
+let VM=null;
+function handleModelFiles(files,draft={}){ const list=[...files]; if(!list.length) return; const vid=list.find(f=>/^video\//.test(f.type)||/\.(mp4|mov|m4v|webm|3gp)$/i.test(f.name)); if(vid) openVideoModel(vid,draft); else openPhotoModel(list,draft); }
+async function openPhotoModel(files,draft){ openSheet('모범 자세 읽기','<p class="note" id="mkNote">사진에서 자세를 읽는 중…</p>'); const note=$('#mkNote');
+  try{ const smp=await samplesFromFiles(files,(i,n)=>{ note.textContent=`사진에서 자세를 읽는 중… ${i}/${n}`; }); if(!smp.length){ note.textContent='사진에서 사람의 자세를 찾지 못했습니다. 몸이 잘 보이는 사진으로 다시 올려 주세요.'; return; } openTemplateReview(smp,draft); }catch(err){ note.textContent='읽지 못했습니다: '+((err&&err.message)||'오류'); } }
+function drawSkel(cv,lm){ const c=cv.getContext('2d'), W=cv.width, H=cv.height; c.clearRect(0,0,W,H); if(!lm) return; c.lineCap='round'; c.strokeStyle='#3fd68f'; c.lineWidth=Math.max(3,W/110); for(const [a,b] of CONNECTIONS){ const pa=lm[a], pb=lm[b]; if((pa.visibility??1)<0.4||(pb.visibility??1)<0.4) continue; c.beginPath(); c.moveTo(pa.x*W,pa.y*H); c.lineTo(pb.x*W,pb.y*H); c.stroke(); } c.fillStyle='#fff'; for(const i of [11,12,13,14,15,16,23,24,25,26,27,28]){ const q=lm[i]; if((q.visibility??1)<0.4) continue; c.beginPath(); c.arc(q.x*W,q.y*H,Math.max(3,W/130),0,Math.PI*2); c.fill(); } }
+/** 영상을 2배 빠르기로 틀면서 화면마다 자세를 읽는다. 영상은 이 기기 안에서만 재생·분석한다 */
+function readVideo(v,cv){ return new Promise((res)=>{ const vm=VM; let done=false, lastT=-1, stall=0; const finish=()=>{ if(done) return; done=true; clearInterval(iv); try{ v.pause(); }catch(e){} res(); };
+  const step=()=>{ if(done) return; if(VM!==vm||!document.body.contains(v)){ finish(); return; } if(v.ended){ finish(); return; }
+    if(v.readyState>=2){ const t=v.currentTime*1000; if(t>lastT){ lastT=t; const lm=detectOn(v,1); if(lm) vm.frames.push(motionFrame(lm,vm.W,vm.H,t)); drawSkel(cv,lm); const d=isFinite(v.duration)&&v.duration>0? Math.min(v.duration,VIDEO_MAX) : VIDEO_MAX; const bar=$('#vmBar'); if(bar) bar.style.width=Math.min(100,v.currentTime/d*100)+'%'; if(v.currentTime>=VIDEO_MAX){ finish(); return; } } }
+    ('requestVideoFrameCallback' in v)? v.requestVideoFrameCallback(step) : requestAnimationFrame(step); };
+  const iv=setInterval(()=>{ if(!v.paused&&v.currentTime*1000<=lastT+1) stall++; else stall=0; if(stall>8||v.ended) finish(); },1000); // 8초 동안 나아가지 않으면 거기까지만 쓴다
+  v.onended=finish; try{ v.playbackRate=2; }catch(e){}
+  v.play().then(step).catch(()=>{ const n=$('#vmNote'); if(!n){ finish(); return; } n.innerHTML='<button class="btn primary" id="vmTap">눌러서 읽기 시작</button>'; $('#vmTap').onclick=()=>{ n.textContent='AI가 영상 속 동작을 읽는 중…'; v.play().then(step).catch(finish); }; }); }); }
+async function openVideoModel(file,draft={}){
+  if(VM&&VM.url){ try{ URL.revokeObjectURL(VM.url); }catch(e){} }
+  VM={file, frames:[], dur:0, a:0, b:0, tpl:null, takes:[], st:{name:draft.name||'', strict:draft.strict||'normal', count:draft.count||10}}; const vm=VM;
+  openSheet('모범 영상 읽기',`<div class="vm"><div class="vmstage"><video id="vmVideo" muted playsinline preload="auto"></video><canvas id="vmCv"></canvas><div class="vmprog" id="vmProg"><i id="vmBar"></i></div></div><p class="note" id="vmNote" role="status">영상을 여는 중…</p><div id="vmBody"></div></div>`);
+  const v=$('#vmVideo'), cv=$('#vmCv'), note=$('#vmNote'); v.muted=true; v.setAttribute('playsinline',''); vm.url=URL.createObjectURL(file);
+  try{ await ensureLandmarker(1); hideOverlay(); if(VM!==vm||!document.body.contains(v)) return; v.src=vm.url;
+    await new Promise((res,rej)=>{ const to=setTimeout(()=>rej(new Error('영상을 여는 데 너무 오래 걸립니다. 더 짧은 영상으로 해 주세요.')),20000); v.onloadeddata=()=>{ clearTimeout(to); res(); }; v.onerror=()=>{ clearTimeout(to); rej(new Error('이 기기에서는 이 영상을 열 수 없습니다. 영상을 찍은 폰에서 바로 올려 보세요.')); }; });
+    vm.W=v.videoWidth||720; vm.H=v.videoHeight||1280; const k=Math.min(1,720/Math.max(vm.W,vm.H)); cv.width=Math.round(vm.W*k); cv.height=Math.round(vm.H*k); $('.vmstage').style.aspectRatio=`${vm.W}/${vm.H}`;
+    note.textContent='AI가 영상 속 동작을 읽는 중… 영상은 이 기기 밖으로 나가지 않습니다.'; await readVideo(v,cv);
+  }catch(err){ if(document.body.contains(note)) note.textContent=(err&&err.message)||'영상을 읽지 못했습니다.'; return; }
+  if(VM!==vm||!document.body.contains(v)) return;
+  if(vm.frames.length<12){ note.textContent='영상에서 사람의 동작을 찾지 못했습니다. 몸 전체가 잘 보이게 찍은 영상으로 다시 올려 주세요.'; return; }
+  const r=activeRange(vm.frames); vm.dur=vm.frames[vm.frames.length-1].t/1000; vm.a=r.t0/1000; vm.b=r.t1/1000; renderVideoModel();
+}
+function vmBuild(){ const vm=VM, t0=vm.a*1000, t1=vm.b*1000, tol=STRICT[vm.st.strict].tol, cut=(a,b)=>vm.frames.filter(f=>f.t>=a&&f.t<=b); const cyc=splitCycles(vm.frames,t0,t1); vm.takes=cyc.map(([a,b])=>cut(a,b)); vm.tpl=buildMotionTemplate(vm.takes,{tol}); if(!vm.tpl&&cyc.length>1){ vm.takes=[cut(t0,t1)]; vm.tpl=buildMotionTemplate(vm.takes,{tol}); } }
+function renderVideoModel(){ const vm=VM, st=vm.st, v=$('#vmVideo'); $('#vmNote').hidden=true; $('#vmProg').hidden=true; drawSkel($('#vmCv'),null); try{ v.playbackRate=1; }catch(e){}
+  const sec=(x)=>x.toFixed(1)+'초';
+  $('#vmBody').innerHTML=`<p class="callout" id="vmInfo"></p>
+    <div class="vmrange"><div class="field"><label for="vmA">동작의 시작 <b id="vmAv"></b></label><input type="range" id="vmA" min="0" max="${vm.dur.toFixed(1)}" step="0.1" value="${vm.a.toFixed(1)}"></div><div class="field"><label for="vmB">동작의 끝 <b id="vmBv"></b></label><input type="range" id="vmB" min="0" max="${vm.dur.toFixed(1)}" step="0.1" value="${vm.b.toFixed(1)}"></div></div>
+    <div class="tplrev" style="margin-top:12px"><div id="vmFig"></div><div>
+      <div class="field"><label for="tName">동작 이름</label><input type="text" id="tName" maxlength="30" value="${esc(st.name)}" placeholder="예: 양궁 슈팅, 스쿼트, 인사"></div>
+      <div class="grid2" style="margin-top:8px"><div class="field"><label for="tCount">따라 할 횟수</label><select id="tCount">${[3,5,10,20].map(n=>`<option value="${n}" ${n===st.count?'selected':''}>${n}번</option>`).join('')}</select></div><div class="field"><label for="tStrict">엄격도</label><select id="tStrict">${Object.entries(STRICT).map(([k,x])=>`<option value="${k}" ${k===st.strict?'selected':''}>${x.label} (±${x.tol}°)</option>`).join('')}</select></div></div>
+      <div class="btns" style="margin-top:12px"><button class="btn primary big" id="tOk">이 모범으로 정하기</button><button class="btn" id="vmPlay">${ICON.play} 고른 구간 보기</button></div>
+      <p class="note" style="margin-top:6px">왼쪽 그림이 영상에서 읽어 낸 모범 동작입니다. 참여자에게는 이 그림이 재생됩니다.</p></div></div>`;
+  const refresh=()=>{ vmBuild(); const tpl=vm.tpl, n=vm.takes.length, info=$('#vmInfo'); $('#vmAv').textContent=sec(vm.a); $('#vmBv').textContent=sec(vm.b); info.className='callout '+(tpl?'good':'warn');
+    info.textContent= !tpl? '이 구간에서는 모범을 만들 수 없습니다. 시작과 끝을 넓혀 주세요.' : (n>1? `영상에서 같은 동작 ${n}번을 찾았습니다. 그 평균(${tpl.dur}초)을 모범으로 씁니다.` : tpl.move<12? `거의 움직이지 않는 "멈춘 자세"(${tpl.dur}초)입니다. 참여자는 이 자세로 버팁니다.` : `동작 한 번(${tpl.dur}초)을 모범으로 씁니다.${vm.b-vm.a>12.5?' 12초보다 길어 앞부분만 씁니다.':''}`)+' 시작과 끝이 맞지 않으면 아래 막대로 고쳐 주세요.';
+    $('#vmFig').innerHTML='<canvas class="figcv tall" id="tplCv"></canvas>'; if(tpl) mountMotion($('#tplCv'),tpl,{label:'모범'}); $('#tOk').disabled=!tpl; };
+  const seek=(t)=>{ try{ v.pause(); v.currentTime=t; }catch(e){} };
+  $('#vmA').addEventListener('input',(e)=>{ vm.a=Math.min(+e.target.value,vm.dur-0.8); if(vm.b<vm.a+0.8){ vm.b=Math.min(vm.dur,vm.a+0.8); $('#vmB').value=vm.b; $('#vmBv').textContent=sec(vm.b); } $('#vmAv').textContent=sec(vm.a); seek(vm.a); });
+  $('#vmB').addEventListener('input',(e)=>{ vm.b=Math.max(+e.target.value,0.8); if(vm.a>vm.b-0.8){ vm.a=Math.max(0,vm.b-0.8); $('#vmA').value=vm.a; $('#vmAv').textContent=sec(vm.a); } $('#vmBv').textContent=sec(vm.b); seek(vm.b); });
+  $('#vmA').addEventListener('change',refresh); $('#vmB').addEventListener('change',refresh);
+  $('#tStrict').addEventListener('change',(e)=>{ st.strict=e.target.value; refresh(); });
+  $('#vmPlay').onclick=()=>{ v.currentTime=vm.a; const stop=()=>{ if(v.currentTime>=vm.b){ v.pause(); v.removeEventListener('timeupdate',stop); } }; v.addEventListener('timeupdate',stop); v.play().catch(()=>{}); };
+  $('#tOk').onclick=()=>{ if(!vm.tpl) return; const name=$('#tName').value.trim()||'모범 동작', count=+$('#tCount').value; const def={id:'cm'+uid(6), kind:'motion', name, tpl:vm.tpl, use:null, count, pass:STRICT[st.strict].pass, createdAt:Date.now()}; if(vm.file.size<=20*1048576) def.demoBlob=vm.file; // 기록 서버가 있는 주소에서는 실제 영상도 참여자에게 보여 준다
+    C.custom=def; C.movement=null; rememberModel(def); $('#fGoal').value=count; $('#fGoal').dataset.touched='1'; try{ v.pause(); }catch(e){} closeSheet(); renderCreate(); gotoStep(3); toast(`"${name}" 모범이 등록되었습니다`); };
+  refresh(); seek(vm.a);
+}
+
 /* ---------- 만들기 시작 → 확인 화면 ---------- */
 function startTemplateCreate(draft={}){
   const st={lead:draft.lead||3, fixed:draft.fixed||0};
-  openSheet('모범 동작 만들기', `<div class="tplrev"><canvas class="figcv tall" id="mkCv"></canvas><div>
+  openSheet('카메라로 모범 동작 찍기', `<div class="tplrev"><canvas class="figcv tall" id="mkCv"></canvas><div>
     <p style="margin:0 0 8px"><b>같은 동작을 3번 찍으면, 그 평균이 모범이 됩니다.</b></p>
     <ol class="howto"><li><b>한 손을 머리 위로</b> 들면 셋을 셉니다</li><li>모범 동작을 <b>한 번</b> 합니다</li><li>다시 <b>한 손을 들면</b> 끝. 이것을 3번</li></ol>
     <div class="field" style="margin-top:10px"><label>준비 시간 (손을 든 뒤 자리를 잡는 시간)</label><div class="btns" id="mkLead">${[3,5,10].map(v=>`<button class="btn sm" data-v="${v}" aria-pressed="${st.lead===v}">${v}초</button>`).join('')}</div></div>
@@ -91,9 +144,10 @@ function startTemplateCreate(draft={}){
   const pick=(box,key)=>$$(`${box} [data-v]`).forEach(b=>b.addEventListener('click',()=>{ st[key]=+b.dataset.v; $$(`${box} [data-v]`).forEach(x=>x.setAttribute('aria-pressed',String(x===b))); })); pick('#mkLead','lead'); pick('#mkFixed','fixed');
   $('#mkCam').onclick=()=>{ closeSheet(); startMotionCapture({n:3, lead:st.lead, fixed:st.fixed, onDone:(t)=>{ showView('create'); openMotionReview(t,Object.assign({},draft,st)); }, onCancel:()=>showView('create')}); };
   $('#mkStill').onclick=()=>startStillCreate(draft);
-  $('#mkVideos').addEventListener('change',async(e)=>{ const files=[...e.target.files].slice(0,6); if(!files.length) return; const note=$('#mkNote'); note.textContent='동작을 읽는 중…'; try{ await ensureLandmarker(1); hideOverlay(); const takes=[]; let i=0; for(const f of files){ i++; note.textContent=`동작을 읽는 중… ${i}/${files.length}`; const t=await takeFromVideo(f); if(t.length>=8) takes.push(t); } if(!takes.length){ note.textContent='영상에서 사람의 동작을 찾지 못했습니다. 몸이 잘 보이는 영상으로 다시 해 주세요.'; return; } openMotionReview(takes,Object.assign({},draft,st)); }catch(err){ note.textContent='읽지 못했습니다: '+((err&&err.message)||'오류'); } });
+  $('#mkVideos').addEventListener('change',(e)=>{ const f=[...e.target.files]; if(f.length) handleModelFiles(f,Object.assign({},draft,st)); });
 }
-const STRICT={ easy:{tol:20,pass:75,label:'너그럽게'}, normal:{tol:14,pass:80,label:'보통'}, strict:{tol:10,pass:85,label:'엄격하게'} };
+// 사람이 눈으로 보고 따라 하면 15~20°는 쉽게 어긋난다. 실제 촬영으로 맞춰 보기 전이라 '보통'을 넉넉하게 잡았다
+const STRICT={ easy:{tol:24,pass:70,label:'너그럽게'}, normal:{tol:18,pass:75,label:'보통'}, strict:{tol:12,pass:82,label:'엄격하게'} };
 function openMotionReview(takes,draft={}){
   const st={ items:takes.map(t=>({t,on:true})), name:draft.name||'', strict:draft.strict||'normal', count:draft.count||10, use:new Set(draft.use||['arms','body','legs']), lead:draft.lead||3, fixed:draft.fixed||0 };
   const build=()=>{ const on=st.items.filter(x=>x.on).map(x=>x.t); return on.length? buildMotionTemplate(on,{tol:STRICT[st.strict].tol}) : null; };

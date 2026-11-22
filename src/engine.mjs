@@ -607,6 +607,39 @@ export function dtwPath(n,m,cost,band,free=0){
   let j=m-1; if(free){ let b=INF; for(let q=Math.max(0,m-1-free);q<m;q++) if(D[n-1][q]<b){ b=D[n-1][q]; j=q; } } if(!(D[n-1][j]<INF)){ let b=INF; for(let q=0;q<m;q++) if(D[n-1][q]<b){ b=D[n-1][q]; j=q; } }
   const path=[]; let i=n-1; while(i>=0&&j>=0){ path.push([i,j]); const f=from[i][j]; if(i===0&&(f===0||j===0)) break; if(f===3){ i--; j--; } else if(f===1) i--; else j--; } return path.reverse();
 }
+/** 올린 영상에서 "모범 동작이 들어 있는 구간"을 어림한다.
+ *  ① 몸 크기가 일정한 구간(= 제자리에 서 있는 동안. 폰으로 걸어오고 걸어가는 부분은 몸 크기가 변한다)을 찾고
+ *  ② 그 안에서 앞뒤의 가만히 있는 부분을 잘라 낸다. 돌려주는 값: {t0,t1(ms), p0,p1(제자리 구간), hold(거의 안 움직임)} */
+export function activeRange(frames){
+  if(!frames||frames.length<8) return null; const n=frames.length;
+  const size=(s)=>{ const P=s.pts; const sho=Math.hypot(P[1][0]-P[2][0],P[1][1]-P[2][1]); const tor= Math.min(P[7][2],P[8][2])>=0.4? Math.hypot((P[1][0]+P[2][0])/2-(P[7][0]+P[8][0])/2,(P[1][1]+P[2][1])/2-(P[7][1]+P[8][1])/2) : 0; return Math.max(tor,sho*1.3); };
+  const raw=frames.map(size); const env=raw.map((_,i)=>{ let m=raw[i]; for(let j=i-1;j>=0&&frames[i].t-frames[j].t<=750;j--) m=Math.max(m,raw[j]); for(let j=i+1;j<n&&frames[j].t-frames[i].t<=750;j++) m=Math.max(m,raw[j]); return m; }); // 굽히는 순간에 몸통이 짧아 보여도 흔들리지 않게 앞뒤 0.75초의 최댓값
+  const sorted=[...env].sort((a,b)=>a-b); let best=0, bm=sorted[0]; for(let i=0;i<n;i+=Math.max(1,Math.floor(n/80))){ const m=sorted[i]; let c=0; for(const v of env) if(v>=m*0.9&&v<=m*1.12) c++; if(c>best){ best=c; bm=m; } }
+  const inBand=env.map(v=>v>=bm*0.9&&v<=bm*1.12); let bs=-1, be=-1, cs=-1, last=-1;
+  for(let i=0;i<n;i++){ if(!inBand[i]) continue; if(cs<0||frames[i].t-frames[last].t>600) cs=i; last=i; if(bs<0||frames[last].t-frames[cs].t>frames[be].t-frames[bs].t){ bs=cs; be=last; } }
+  if(bs<0||frames[be].t-frames[bs].t<800) { bs=0; be=n-1; }
+  const part=frames.slice(bs,be+1), seq=resampleTake(part), base=part[0].t; const out={t0:base, t1:part[part.length-1].t, p0:base, p1:part[part.length-1].t, hold:true}; if(seq.length<4) return out;
+  const e=seq.map((x,i)=> i? stepEnergy(seq[i-1],x) : 0), sm=e.map((_,i)=>(e[Math.max(0,i-1)]+e[i]+e[Math.min(e.length-1,i+1)])/3), thr=1.3;
+  if(Math.max(...sm)<thr*1.6){ if(out.t1-out.t0>6000){ const mid=(out.t0+out.t1)/2; out.t0=mid-2500; out.t1=mid+2500; } return out; } // 멈춘 자세: 가운데 5초만
+  // 가만히 서 있는 순간(0.4초 이상)을 찾는다. 보통 "자리 잡고 잠깐 멈춤 → 동작 → 잠깐 멈춤 → 걸어 나옴"이므로,
+  // 구간의 앞 2초 안에서 시작하는 첫 멈춤과 끝 2초 안에서 끝나는 마지막 멈춤 사이를 동작으로 본다(걸어 들어오고 나가는 부분이 빠진다).
+  const still=[]; let q=-1; for(let i=0;i<=sm.length;i++){ const r= i<sm.length&&sm[i]<=thr; if(r&&q<0) q=i; if(!r&&q>=0){ if(i-q>=4) still.push([q,i-1]); q=-1; } }
+  let a=sm.findIndex(v=>v>thr), b=sm.length-1; while(b>a&&sm[b]<=thr) b--; a=Math.max(0,a-5); b=Math.min(seq.length-1,b+5);
+  const f0=still[0], f1=still[still.length-1], mid=(r)=>seq[Math.round((r[0]+r[1])/2)]; // 두 멈춤의 자세가 서로 비슷할 때만(둘 다 '서 있는 자세') 쓴다. 동작 중간의 멈춤과 헷갈리지 않게
+  if(f0&&f1&&f1!==f0&&f0[0]<=20&&f1[1]>=seq.length-1-20&&frameDist(mid(f0),mid(f1))<14){ a=Math.max(0,f0[1]-5); b=Math.min(seq.length-1,f1[0]+5); }
+  if(b-a<8){ a=0; b=seq.length-1; }
+  out.t0=base+a*100; out.t1=Math.min(out.p1,base+b*100); out.hold=false; return out;
+}
+/** 구간 안에서 같은 동작이 되풀이되면 한 번씩으로 나눈다(처음 자세로 돌아오는 곳이 경계). 못 나누면 구간 전체가 한 번. 돌려주는 값: [[t0,t1]…] */
+export function splitCycles(frames,t0,t1){
+  const one=[[t0,t1]]; const fr=(frames||[]).filter(f=>f.t>=t0&&f.t<=t1); if(fr.length<8) return one; const seq=resampleTake(fr); if(seq.length<16) return one; const base=fr[0].t;
+  const d=seq.map(x=>frameDist(seq[0],x)), sm=d.map((_,i)=>(d[Math.max(0,i-1)]+d[i]+d[Math.min(d.length-1,i+1)])/3), mx=Math.max(...sm); if(mx<10) return one;
+  const thr=Math.max(5,mx*0.3), rests=[]; let s0=-1; for(let i=0;i<=sm.length;i++){ const r= i<sm.length&&sm[i]<thr; if(r&&s0<0) s0=i; if(!r&&s0>=0){ rests.push([s0,i-1]); s0=-1; } }
+  if(rests.length<3) return one;
+  const cyc=[]; for(let k=0;k<rests.length-1;k++){ const a=Math.max(rests[k][0],rests[k][1]-4), b=Math.min(rests[k+1][1],rests[k+1][0]+4); cyc.push({a,b,len:b-a,peak:Math.max(...sm.slice(a,b+1))}); }
+  const good=cyc.filter(c=>c.len>=8&&c.peak>=mx*0.6); if(good.length<2) return one; const med=median(good.map(c=>c.len)), ok=good.filter(c=>c.len>=med/1.6&&c.len<=med*1.6); if(ok.length<2) return one;
+  return ok.slice(0,6).map(c=>[base+c.a*100, base+c.b*100]);
+}
 /** 찍은 동작 여러 번 → 모범 동작. opts.tol: 허용 범위의 바닥값(°) */
 export function buildMotionTemplate(takes, opts={}){
   const hz=MOTION_HZ, tolBase=opts.tol??14, KEYS=Object.keys(FEATURES);
