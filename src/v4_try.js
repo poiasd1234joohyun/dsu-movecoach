@@ -1,18 +1,29 @@
 /* ================= 체험: 샘플 수업방(가상 학생) · 1분 체험 · 기기 점검 ================= */
-const DEMO_ID='Ldemo01', DEMO_GAME_ID='Ldemo02', DEMO_KEY='demo', DEMO_SEED_VER=2, DEMO_N=32;
+const DEMO_ID='Ldemo01', DEMO_GAME_ID='Ldemo02', DEMO_KEY='demo', DEMO_SEED_VER=6, DEMO_N=24;
 const SAMPLE_VIDEO='./media/sample_squat.mp4'; // 팀원이 직접 찍은 영상을 이 자리에 넣으면 "촬영해 둔 영상" 버튼이 나타난다
 const T={ lastId:null, sample:false };
 const V_SUR=['김','이','박','최','정','강','조','윤','장','임','한','오','서','신','권','황'];
 const V_GIV=['하늘','도윤','서연','지호','민서','예준','수아','건우','지유','현우','다은','준서','채원','시우','유나','태윤','소율','은우','하린','지안','서준','예린','주원','나은','민재','가은','승현','다인','우진','세아','동현','라온'];
 const vName=(i)=>V_SUR[(i*5+3)%V_SUR.length]+V_GIV[i%V_GIV.length];
 
+/* ---------- 예시 모범(양궁 동작): 가상 인물의 동작 3번을 평균해서 만든다. 실제 사람·실제 영상이 아니다 ---------- */
+const ARCH={ lead:0.6, tin:1.4, hold:1.6, tout:1.0 }; // 서 있다가 → 들어 올려 당기고 → 멈췄다가 → 내린다
+function archScript(o={}){ const a=Object.assign({},ARCH,o); const fn=(t)=>{ const x=t-a.lead; const u= x<0?0 : x<a.tin? ease01(x/a.tin) : x<a.tin+a.hold? 1 : x<a.tin+a.hold+a.tout? 1-ease01((x-a.tin-a.hold)/a.tout) : 0; return lerpPose(standPose({cy:0.3}), archeryPose(Object.assign({cy:0.3},o.pose||{})), u); }; fn.duration=a.lead+a.tin+a.hold+a.tout+0.6; return fn; } // cy:0.3 = 발끝까지 화면 안에 들어오게 조금 위로
+let DEMO_TPL=null;
+function demoMotionTpl(){ if(DEMO_TPL) return DEMO_TPL; const take=(fn)=>{ const fr=[]; for(let t=0;t<=fn.duration*1000;t+=50) fr.push(motionFrame(fn(t/1000),720,960,t)); return fr; };
+  DEMO_TPL=buildMotionTemplate([take(archScript()), take(archScript({tin:1.6,hold:1.5,lead:0.8})), take(archScript({tin:1.3,hold:1.7,tout:1.1,pose:{elbowDrop:2}}))]); return DEMO_TPL; }
+const demoMotionDef=()=>({id:'cmdemo', kind:'motion', name:'양궁 슈팅 (예시 모범)', tpl:demoMotionTpl(), count:10, pass:80});
+/** 가상 학생이 모범을 따라 하는 것을 화면 없이 끝까지 돌려 결과를 얻는다. plan: 회차마다 {pose:틀린 정도, lag:늦는 정도(초), slow:느린 정도(배)} */
+function simulateFollow(mv, plan){ const an=new FollowAnalyzer(mv,{goal:plan.length}); let t=1000, playT=null, k=0; const stand=standPose({cy:0.3}); for(let n=0;n<20000;n++){ t+=1000/14; let lm=stand; if(an.phase==='play'&&playT!=null){ const r=plan[Math.min(k,plan.length-1)]||{}; lm=archScript({pose:r.pose, tin:ARCH.tin*(r.slow||1), hold:ARCH.hold*(r.slow||1), tout:ARCH.tout*(r.slow||1)})((t-playT)/1000+0.25-(r.lag||0)); } const out=an.update(lm,720,960,t); if(out.repEvent&&out.repEvent.go) playT=t; if(out.repEvent&&out.repEvent.n) k=out.repEvent.n; if(out.done) break; } return an.summary(); }
+function followPlan(rnd, level, reps=10){ const habit= rnd()<0.6? 'elbow' : rnd()<0.6? 'bow' : 'late'; return Array.from({length:reps},()=>{ const slip= rnd()>level; if(!slip) return {pose:{elbowDrop:Math.round((rnd()-0.5)*8)}, lag:rnd()*0.25}; return habit==='elbow'? {pose:{elbowDrop:24+Math.round(rnd()*18)}} : habit==='bow'? {pose:{bowDrop:22+Math.round(rnd()*14)}} : {lag:0.5, slow:1.5+rnd()*0.3}; }); }
+
 /* ---------- 샘플 수업방: 가상 학생의 기록(실제 학생 아님) ---------- */
-function demoCfg(){ return { id:DEMO_ID, demo:true, mode:'practice', course:'웨이트트레이닝1', title:'3주차 자세 교정 (샘플 수업방)', prof:'', movement:'squat', customMovement:null, goal:10, due:'', demoUrl:'', notes:'', video:false, autoSend:true, takes:0, release:true, face:false, pw:'', game:null, createdAt:new Date().toISOString() }; }
-function demoGameCfg(){ return Object.assign(demoCfg(),{ id:DEMO_GAME_ID, mode:'game', title:'스쿼트 20개 시합 (샘플)', goal:20, game:{kind:'race',players:1} }); }
+function demoCfg(){ return { id:DEMO_ID, demo:true, mode:'practice', course:'양궁 기초', title:'슈팅 자세 따라 하기 (샘플 수업방)', prof:'', movement:null, customMovement:demoMotionDef(), goal:10, due:'', demoUrl:'', notes:'', video:false, autoSend:true, takes:0, release:true, face:false, pw:'', game:null, createdAt:new Date().toISOString() }; }
+function demoGameCfg(){ return Object.assign(demoCfg(),{ id:DEMO_GAME_ID, mode:'game', course:'웨이트트레이닝1', title:'스쿼트 20개 시합 (샘플)', movement:'squat', customMovement:null, goal:20, game:{kind:'race',players:1} }); }
 function seedDemoRecords(){
-  const cfg=demoCfg(), mv=MOVEMENTS.squat, rnd=seeded(20261118), rnd2=seeded(47011), now=Date.now(), out=[];
+  const cfg=demoCfg(), mv=customMovement(cfg.customMovement), rnd=seeded(20261119), rnd2=seeded(47011), now=Date.now(), out=[];
   for(let i=0;i<DEMO_N;i++){
-    const su=simulate(mv, squatScript(studentSquatPlan(rnd, studentLevel(rnd))), {goal:10}); if(!su) continue; // 분석 엔진이 실제로 채점한 결과
+    const su=simulateFollow(mv, followPlan(rnd, studentLevel(rnd))); if(!su) continue; // 분석 엔진이 가상 동작을 실제로 채점한 결과
     const ts=now-Math.round((3+rnd2()*36)*60000); // 최근 40분 안에 낸 것처럼
     const s=Object.assign(su,{ts, mode:'practice', student:{name:vName(i), id:`2026${String(1001+i*3)}`}, course:cfg.course, title:cfg.title});
     out.push(Object.assign(recordPayload(s,''),{roomId:DEMO_ID, id:'S'+String(100+i), video:undefined, hasVideo:false, local:true, seed:true, device:'가상 데이터'}));
@@ -20,45 +31,47 @@ function seedDemoRecords(){
   out.sort((a,b)=>a.score-b.score); // 점수가 낮은 두 명에게는 이미 답장을 보낸 상태로 둔다
   out.slice(1,3).forEach(r=>{ r.reply=buildReply(r, mv); r.replyAt=new Date(now-60000).toISOString(); });
   // 게임 순위판 샘플: 가상 학생 14명의 스쿼트 20개 시합 기록
-  const g=demoGameCfg(), rnd3=seeded(5021), av=['🐰','🐻','🦊','🐼','🐯','🦁','🐸','🐵','🐧','🦄'];
+  const g=demoGameCfg(), rnd3=seeded(5021), av=AVATARS;
   for(let i=0;i<14;i++){ const done=rnd3()>0.14; const time= done? +(34+rnd3()*30).toFixed(1) : null; const count= done?20:8+Math.floor(rnd3()*11);
     out.push({roomId:DEMO_GAME_ID, id:'G'+String(100+i), mode:'game', course:g.course, title:g.title, name:vName(i+7), studentId:'', movement:'squat', movementName:'스쿼트', kind:'game', count, goal:20, score:Math.round(count/20*100), grade:'', topIssue:'', tiles:[['게임','스쿼트 시합'],['결과', done?`완주 ${time}초`:`${count}회`]], items:[], comment:'', ts:new Date(now-Math.round(rnd3()*9*60000)).toISOString(), device:'가상 데이터', local:true, seed:true, hasVideo:false, game:{kind:'race',players:1,time,result: done?`완주 ${time}초`:`${count}회 (미완주)`,avatar:av[i%av.length],winner:null,valid:count,invalid:Math.floor(rnd3()*4),combo:3+Math.floor(rnd3()*9)}}); }
   return out;
 }
 function ensureDemoRoom(){
-  const rooms=store.get('mc4.localrooms',{}); let ch=false; if(!rooms[DEMO_ID]){ rooms[DEMO_ID]={cfg:demoCfg(),adminKey:DEMO_KEY}; ch=true; } if(!rooms[DEMO_GAME_ID]){ rooms[DEMO_GAME_ID]={cfg:demoGameCfg(),adminKey:DEMO_KEY}; ch=true; } if(ch) store.set('mc4.localrooms',rooms);
+  const rooms=store.get('mc4.localrooms',{}); const fresh= store.get('mc4.demoSeed',0)!==DEMO_SEED_VER; let ch=false; if(!rooms[DEMO_ID]||fresh){ rooms[DEMO_ID]={cfg:demoCfg(),adminKey:DEMO_KEY}; ch=true; } if(!rooms[DEMO_GAME_ID]||fresh){ rooms[DEMO_GAME_ID]={cfg:demoGameCfg(),adminKey:DEMO_KEY}; ch=true; } if(ch) store.set('mc4.localrooms',rooms);
   const recs=store.get('mc4.records',[]); const isDemo=(r)=>(r.roomId===DEMO_ID||r.roomId===DEMO_GAME_ID)&&r.seed;
-  if(store.get('mc4.demoSeed',0)!==DEMO_SEED_VER || !recs.some(isDemo)){ store.set('mc4.records', recs.filter(r=>!isDemo(r)).concat(seedDemoRecords()).slice(0,400)); store.set('mc4.demoSeed',DEMO_SEED_VER); }
+  if(fresh || !recs.some(isDemo)){ store.set('mc4.records', recs.filter(r=>!isDemo(r)).concat(seedDemoRecords()).slice(0,400)); store.set('mc4.demoSeed',DEMO_SEED_VER); }
   return rooms[DEMO_ID].cfg;
 }
 
 /* ---------- 1분 체험 ---------- */
-function enterTry(mv){ const cfg=ensureDemoRoom(); S.room=cfg; S.roomId=DEMO_ID; S.role='try'; R={mode:'practice',cfg,mv,takeCount:0}; S.takes=[]; }
+function enterTry(mv){ const cfg=ensureDemoRoom(); S.room=cfg; S.roomId=DEMO_ID; S.role='try'; R={mode:'practice',cfg,mv,takeCount:0,av:[0,1]}; S.takes=[]; }
 const TRY_ME={name:'체험자',id:'체험'};
-// A. 내 카메라로: 아무 자세나 모범으로 3번 찍고 → 그 자세를 다시 따라 한다(만드는 사람과 따라 하는 사람을 한 번에 체험)
-function tryMatch(){ enterTry(MOVEMENTS.squat); startCapture({n:3, onCancel:()=>backView(), onDone:(samples)=>{ const tpl=buildPoseTemplate(samples); if(!tpl){ toast('자세를 읽지 못했습니다. 어깨와 양팔이 보이게 다시 해 주세요'); backView(); return; } const mv=matchMovement({id:'cmtry',name:'내가 찍은 모범',kind:'match',tpl,hold:2}); enterTry(mv); startSession({mode:'practice', movement:mv, goal:3, student:TRY_ME, try:'match'}); }}); }
+// A. 내 카메라로: 아무 동작이나 모범으로 3번 찍고 → 그 동작을 다시 따라 한다(만드는 사람과 따라 하는 사람을 한 번에 체험)
+function tryMatch(){ enterTry(MOVEMENTS.squat); startMotionCapture({n:3, lead:3, onCancel:()=>backView(), onDone:(takes)=>{ const tpl=buildMotionTemplate(takes); if(!tpl){ toast('동작을 읽지 못했습니다. 어깨와 양팔이 보이게 다시 해 주세요'); backView(); return; } const mv=motionMovement({id:'cmtry',name:'내가 찍은 모범',kind:'motion',tpl,count:3}); enterTry(mv); startSession({mode:'practice', movement:mv, goal:3, student:TRY_ME, try:'match'}); }}); }
 // A'. 내 카메라로: 앉은 채 팔 뻗기 5회
 function tryCamera(){ enterTry(MOVEMENTS.press); startSession({mode:'practice', movement:MOVEMENTS.press, goal:5, student:TRY_ME, try:'cam'}); }
 // B. 카메라 없이: 가상 동작 데이터(일부러 틀린 동작 포함)로 같은 화면을 본다
 const TRY_SYNTH={
   squat:()=>{ const plan=[{bottom:88,trunk:34},{bottom:90,trunk:36},{bottom:109,trunk:38},{bottom:91,trunk:36},{bottom:90,trunk:63},{bottom:88,trunk:35},{bottom:118,trunk:37},{bottom:89,trunk:35}]; return {mv:MOVEMENTS.squat, goal:plan.length, synth:squatScript(plan,{ar:0.75})}; },
-  match:()=>{ const tpl=buildPoseTemplate([archeryPose(),archeryPose({elbowDrop:3,bowDrop:2}),archeryPose({elbowDrop:-3,lean:1})].map(lm=>poseSample(lm,720,960))); const mv=matchMovement({id:'cmdemo',name:'양궁 풀 드로 (예시 모범)',kind:'match',tpl,hold:2}); return {mv, goal:3, synth:poseScript([{pose:archeryPose({elbowDrop:2})},{pose:archeryPose({elbowDrop:30,bowDrop:10}),hold:3.2},{pose:archeryPose({bowDrop:3})}], standPose(), {lead:0.8})}; },
+  // 모범 동작 따라 하기: 가상 학생이 4번 따라 한다. 2번째는 팔꿈치가 낮고, 3번째는 늦다
+  motion:()=>{ const mv=customMovement(demoMotionDef()); const plan=[{pose:{elbowDrop:2}},{pose:{elbowDrop:34,bowDrop:8}},{lag:0.5,slow:1.6},{pose:{bowDrop:3}}]; const stand=standPose({cy:0.3});
+    const synth=(el,now)=>{ const an=S.analyzer; if(!an||an.phase!=='play'||now==null) return stand; const r=plan[Math.min(an.reps.length,plan.length-1)]; return archScript({pose:r.pose, tin:ARCH.tin*(r.slow||1), hold:ARCH.hold*(r.slow||1), tout:ARCH.tout*(r.slow||1)})((now-an.playT)/1000+0.25-(r.lag||0)); }; return {mv, goal:plan.length, synth}; },
   run:()=>({mv:MOVEMENTS.run, goal:16, synth:runScript([{sec:8,spm:170,lean:24},{sec:12,spm:174}],{lead:0.6})}),
   bow:()=>({mv:MOVEMENTS.bow, goal:3, synth:bowScript([{lean:31},{lean:21},{lean:32,kneeBend:34},{lean:31}],{lead:0.8})}),
 };
-function trySynth(kind='squat'){ const d=(TRY_SYNTH[kind]||TRY_SYNTH.squat)(); enterTry(d.mv); startSession({mode:'practice', movement:d.mv, goal:d.goal, student:{name:'체험자(가상 동작)',id:'체험'}, try:'synth:'+kind, synth:d.synth, synthW:720, synthH:960}); }
+function trySynth(kind='motion'){ const d=(TRY_SYNTH[kind]||TRY_SYNTH.motion)(); enterTry(d.mv); startSession({mode:'practice', movement:d.mv, goal:d.goal, student:{name:'체험자(가상 동작)',id:'체험'}, try:'synth:'+kind, synth:d.synth, synthW:720, synthH:960}); }
 // B'. 촬영해 둔 실제 영상(팀원 본인)을 이 기기에서 분석
 function trySample(){ enterTry(MOVEMENTS.squat); startSession({mode:'practice', movement:MOVEMENTS.squat, goal:null, student:{name:'체험자(샘플 영상)',id:'체험'}, try:'video', file:{url:SAMPLE_VIDEO,name:'팀원이 직접 찍은 스쿼트 영상'}}); }
 // C. 모이는 화면
 function tryAdmin(){ ensureDemoRoom(); openAdminPage(DEMO_ID,DEMO_KEY); }
 function tryBoard(){ ensureDemoRoom(); openAdminPage(DEMO_GAME_ID,DEMO_KEY); }
-function retry(kind){ if(kind==='cam') tryCamera(); else if(kind==='match') tryMatch(); else if(kind==='video') trySample(); else trySynth(String(kind).split(':')[1]||'squat'); }
+function retry(kind){ if(kind==='cam') tryCamera(); else if(kind==='match') tryMatch(); else if(kind==='video') trySample(); else trySynth(String(kind).split(':')[1]||'motion'); }
 function renderTry(){
   $('#tryCards').innerHTML=`
-    <div class="trycard"><canvas class="figcv" id="tryCv1"></canvas><h3>내 카메라로 해 보기</h3><p>아무 자세나 3번 찍고, 다시 따라 하면 점수가 나옵니다.</p><div class="btns"><button class="btn primary" id="tryMatch">📸 모범 찍고 따라 하기</button><button class="btn" id="tryCam">팔 뻗기 5회</button></div><p class="note">영상은 이 기기 밖으로 나가지 않습니다.</p></div>
-    <div class="trycard"><canvas class="figcv" id="tryCv2"></canvas><h3>카메라 없이 구경하기</h3><p>가상 인물이 일부러 틀리게 움직입니다. 어떻게 교정하는지 보세요.</p><div class="btns"><button class="btn primary" data-syn="squat" id="trySyn">스쿼트</button><button class="btn" data-syn="match">양궁 자세</button><button class="btn" data-syn="run">달리기</button><button class="btn" data-syn="bow">인사</button><button class="btn" id="tryVid" hidden>찍어 둔 영상</button></div><p class="note">실제 사람·실제 영상이 아닌 가상 동작 데이터입니다.</p></div>
-    <div class="trycard"><canvas class="figcv" id="tryCv3"></canvas><h3>모이는 화면 보기</h3><p>가상 학생 ${DEMO_N}명의 기록. 점수가 낮은 학생이 위에 옵니다.</p><div class="btns"><button class="btn primary" id="tryAdm">결과 화면</button><button class="btn" id="tryBrd">🏁 게임 순위판</button></div><p class="note">모두 가상 인물의 기록입니다.</p></div>`;
-  mountScene($('#tryCv1'),'match',{cue:true}); mountScene($('#tryCv2'),'squat',{cue:true,bad:true}); mountScene($('#tryCv3'),'race');
+    <div class="trycard"><canvas class="figcv" id="tryCv2"></canvas><div class="tc"><h3>카메라 없이 보기</h3><p>가상 인물이 모범을 따라 합니다. 일부러 틀리는 회차가 섞여 있습니다.</p><div class="btns"><button class="btn primary" data-syn="motion" id="trySyn">${ICON.play} 모범 따라 하기</button><button class="btn" data-syn="squat">스쿼트</button><button class="btn" data-syn="run">달리기</button><button class="btn" data-syn="bow">인사</button><button class="btn" id="tryVid" hidden>찍어 둔 영상</button></div></div></div>
+    <div class="trycard"><canvas class="figcv" id="tryCv1"></canvas><div class="tc"><h3>내 카메라로 해 보기</h3><p>아무 동작이나 3번 찍고, 그 동작을 다시 따라 해 봅니다.</p><div class="btns"><button class="btn primary" id="tryMatch">${ICON.video} 모범 찍고 따라 하기</button><button class="btn" id="tryCam">팔 뻗기 5회</button></div></div></div>
+    <div class="trycard"><canvas class="figcv" id="tryCv3"></canvas><div class="tc"><h3>모이는 화면 보기</h3><p>가상 학생 ${DEMO_N}명의 기록입니다. 점수가 낮은 학생이 위에 옵니다.</p><div class="btns"><button class="btn primary" id="tryAdm">${ICON.chart} 결과 화면</button><button class="btn" id="tryBrd">${ICON.game} 게임 순위판</button></div></div></div>`;
+  mountScene($('#tryCv1'),'match',{cue:true}); mountScene($('#tryCv2'),'match',{cue:true,bad:true}); mountScene($('#tryCv3'),'race');
   $('#tryMatch').onclick=tryMatch; $('#tryCam').onclick=tryCamera; $$('#tryCards [data-syn]').forEach(b=>b.addEventListener('click',()=>trySynth(b.dataset.syn))); $('#tryVid').onclick=trySample; $('#tryAdm').onclick=tryAdmin; $('#tryBrd').onclick=tryBoard;
   if(HOSTED) fetch(SAMPLE_VIDEO,{method:'HEAD'}).then(r=>{ T.sample= r.ok&&/video/.test(r.headers.get('content-type')||''); $('#tryVid').hidden=!T.sample; }).catch(()=>{});
 }

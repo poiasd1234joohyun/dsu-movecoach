@@ -192,7 +192,7 @@ export const MOVEMENTS = {
 };
 
 /** 교수자가 시범으로 만든 사용자 정의 동작: 템플릿(기존 rep 동작) + 이름 + 목표 */
-export function customMovement(def){ if(def.kind==='match'&&def.tpl) return matchMovement(def); const base=MOVEMENTS[def.template]||MOVEMENTS.squat; const fb={}; for(const k of Object.keys(base.feedback||{})) fb[k]=Object.assign({},base.feedback[k],(def.feedback||{})[k]||{}); return Object.assign({}, base, {id:def.id, name:def.name, target:def.target??base.target, duration:def.duration??base.duration, count:def.count??base.count, custom:true, template:def.template, checkpoints:(def.checkpoints&&def.checkpoints.length)?def.checkpoints:base.checkpoints, setup:def.setup||base.setup, feedback:fb}); }
+export function customMovement(def){ if(def.kind==='motion'&&def.tpl) return motionMovement(def); if(def.kind==='match'&&def.tpl) return matchMovement(def); const base=MOVEMENTS[def.template]||MOVEMENTS.squat; const fb={}; for(const k of Object.keys(base.feedback||{})) fb[k]=Object.assign({},base.feedback[k],(def.feedback||{})[k]||{}); return Object.assign({}, base, {id:def.id, name:def.name, target:def.target??base.target, duration:def.duration??base.duration, count:def.count??base.count, custom:true, template:def.template, checkpoints:(def.checkpoints&&def.checkpoints.length)?def.checkpoints:base.checkpoints, setup:def.setup||base.setup, feedback:fb}); }
 
 /* ===== 반복 동작 ===== */
 const hitCheck=(ch,v,target)=>{ const lim= ch.rel!=null? target+ch.rel : ch.value; return (ch.op==='>'&&v>lim)||(ch.op==='<'&&v<lim); };
@@ -469,14 +469,15 @@ export function buildPoseTemplate(samples, opts={}){
 }
 /** 모범과 현재 자세 비교. sim: 0~100, per: 부위별 차이, worst: 가장 많이 벗어난 부위. 좌우가 뒤집힌 자세도 함께 견줘 더 비슷한 쪽을 쓴다. */
 export function comparePose(tpl, feats, opts={}){
-  const keys=Object.keys(tpl.f).filter(k=>!opts.use||opts.use.includes(FEATURES[k].group)); const scale=opts.tolScale??1;
+  const keys=Object.keys(tpl.f).filter(k=>!opts.use||opts.use.includes(FEATURES[k].group)); const scale=opts.tolScale??1, slope=opts.slope??2.5, lowN=opts.lowN??3, lowW=opts.lowW??0.5;
   const run=(mir)=>{ let sum=0,n=0,miss=0; const per={}; let worst=null;
-    for(const k of keys){ const sk= mir?SWAP[k]:k; const s=feats[sk]; if(!s||s.v<0.4){ miss++; continue; } const sa= mir?-s.a:s.a; const [m,tol]=tpl.f[k]; const d=Math.abs(circDiff(sa,m)); const ex=Math.max(0,d-tol*scale); const sc=clamp(100-ex*2.5,0,100);
+    for(const k of keys){ const sk= mir?SWAP[k]:k; const s=feats[sk]; if(!s||s.v<0.4){ miss++; continue; } const sa= mir?-s.a:s.a; const [m,tol]=tpl.f[k]; const d=Math.abs(circDiff(sa,m)); const ex=Math.max(0,d-tol*scale); const sc=clamp(100-ex*slope,0,100);
       const flip= Math.sign(sa)!==Math.sign(m) && Math.abs(sa)>25 && Math.abs(m)>25 && Math.abs(sa)<155 && Math.abs(m)<155 && Math.abs(Math.abs(sa)-Math.abs(m))<=tol*scale;
       per[sk]={d, ok:ex===0, sc, dir: Math.abs(sa)<Math.abs(m)?-1:1, flip, tk:k}; sum+=sc; n++; if(ex>0&&(!worst||ex>worst.ex)) worst={k:sk,ex,d}; }
     // 전체 평균만 쓰면 "다리·몸통은 같고 팔만 전혀 다른" 자세도 점수가 높게 나온다 → 가장 많이 틀린 세 부위의 평균을 절반 반영한다
-    const low=Object.values(per).map(x=>x.sc).sort((a,b)=>a-b).slice(0,3); const lowAvg= low.length? low.reduce((a,b)=>a+b,0)/low.length : 0;
-    return {sim:n? 0.5*(sum/n)+0.5*lowAvg : 0, n, miss, per, worst, mirrored:mir}; };
+    const low=Object.values(per).map(x=>x.sc).sort((a,b)=>a-b).slice(0,lowN); const lowAvg= low.length? low.reduce((a,b)=>a+b,0)/low.length : 0;
+    return {sim:n? (1-lowW)*(sum/n)+lowW*lowAvg : 0, n, miss, per, worst, mirrored:mir}; };
+  if(opts.forceMirror===true) return run(true); if(opts.forceMirror===false) return run(false);
   const a=run(false); if(opts.mirror===false) return a; const b=run(true);
   return opts.preferMirror? (a.sim>b.sim+3? a:b) : (b.sim>a.sim+3? b:a);
 }
@@ -559,6 +560,188 @@ export class StillCapture {
     if(t-this.since>=this.minMs&&this.buf.length>=4){ const s=mergeSamples(this.buf); this.samples.push(s); this.buf=[]; this.since=null; this.armed=false; return s; } return null; }
 }
 
+/* ===== 모범 동작(영상) 따라 하기 =====
+ * 모범: 같은 동작을 여러 번(보통 3번) 찍어, 빠르기 차이를 맞춘 뒤 평균한 "동작 한 번".
+ * 저장: 사진·영상이 아니라 숫자. 시간에 따른 관절 각도(2° 단위)와 윤곽 좌표를 한 바이트씩 담아 글자로 바꾼다(약 0.7KB).
+ * 따라 하기: 모범이 재생되는 동안 찍힌 참여자 동작을, 조금 늦거나 빨라도 되게 시간축을 맞춰(DTW) 견준다.
+ */
+const B64='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+export function packBytes(arr){ let s=''; for(let i=0;i<arr.length;i+=3){ const a=arr[i]&255, b=i+1<arr.length?arr[i+1]&255:0, c=i+2<arr.length?arr[i+2]&255:0; s+=B64[a>>2]+B64[((a&3)<<4)|(b>>4)]; if(i+1<arr.length) s+=B64[((b&15)<<2)|(c>>6)]; if(i+2<arr.length) s+=B64[c&63]; } return s; }
+export function unpackBytes(s){ const out=[]; let buf=0,bits=0; for(let i=0;i<s.length;i++){ const v=B64.indexOf(s[i]); if(v<0) continue; buf=(buf<<6)|v; bits+=6; if(bits>=8){ bits-=8; out.push((buf>>bits)&255); buf&=(1<<bits)-1; } } return out.map(v=>v>127?v-256:v); }
+const lerpAng=(a,b,u)=>a+circDiff(b,a)*u;
+const median=(a)=>{ const s=[...a].sort((x,y)=>x-y); return s.length? s[Math.floor((s.length-1)/2)] : 0; };
+const MOTION_HZ=10, SK_SCALE=40;
+
+/** 한 프레임 → 동작 표본(시각 포함) */
+export function motionFrame(lm,W,H,t){ const s=poseSample(lm,W,H); s.t=t; return s; }
+/** 불규칙한 프레임을 1초에 10장으로 고르게 다시 뽑고, 각도의 잔떨림을 줄인다 */
+export function resampleTake(frames,hz=MOTION_HZ){
+  if(!frames||frames.length<2) return []; const t0=frames[0].t, t1=frames[frames.length-1].t; const n=Math.floor((t1-t0)/1000*hz)+1; const out=[]; let j=0;
+  for(let i=0;i<n;i++){ const t=t0+i*1000/hz; while(j<frames.length-2&&frames[j+1].t<t) j++; const A=frames[j], B=frames[Math.min(j+1,frames.length-1)]; const u= B.t>A.t? clamp((t-A.t)/(B.t-A.t),0,1) : 0;
+    const f={}; for(const k of Object.keys(FEATURES)){ const a=A.f[k], b=B.f[k]; f[k]={a:lerpAng(a.a,b.a,u), v:a.v+(b.v-a.v)*u}; }
+    out.push({t:i/hz, f, pts:A.pts.map((p,q)=>[0,1,2].map(d=>p[d]+(B.pts[q][d]-p[d])*u)), ratio:A.ratio+(B.ratio-A.ratio)*u}); }
+  return out.map((x,i)=>{ const a=out[Math.max(0,i-1)], b=out[Math.min(out.length-1,i+1)]; const f={}; for(const k of Object.keys(FEATURES)) f[k]={a:circMean([a.f[k].a,x.f[k].a,x.f[k].a,b.f[k].a]), v:x.f[k].v}; return Object.assign({},x,{f}); });
+}
+const stepEnergy=(a,b)=>{ let s=0,n=0; for(const k of Object.keys(FEATURES)){ if(a.f[k].v<0.5||b.f[k].v<0.5) continue; s+=Math.abs(circDiff(a.f[k].a,b.f[k].a)); n++; } return n? s/n : 0; };
+/** 앞뒤의 가만히 있는 구간을 잘라 낸다(0.4초씩은 남긴다). 처음부터 끝까지 거의 안 움직였으면 "멈춘 자세"로 보고 그대로 둔다. */
+export function trimIdle(seq,hz=MOTION_HZ){
+  if(seq.length<3) return seq; const e=seq.map((x,i)=> i? stepEnergy(seq[i-1],x) : 0); const sm=e.map((_,i)=>(e[Math.max(0,i-1)]+e[i]+e[Math.min(e.length-1,i+1)])/3); const thr=1.3;
+  if(Math.max(...sm)<thr*1.6) return seq; let a=sm.findIndex(v=>v>thr), b=sm.length-1; while(b>a&&sm[b]<=thr) b--; const pad=Math.round(hz*0.4); a=Math.max(0,a-pad); b=Math.min(seq.length-1,b+pad);
+  return seq.slice(a,b+1).map((x,i)=>Object.assign({},x,{t:i/hz}));
+}
+/** 끝내기 신호(한 손 들기)를 하느라 생긴 마지막 "손 올리는 동작"을 잘라 낸다 */
+export function cutGestureTail(frames){
+  if(!frames||frames.length<6) return frames||[]; const h=(s,j)=>{ const P=s.pts; const sy=(P[1][1]+P[2][1])/2, hy=(P[7][1]+P[8][1])/2; return (sy-P[j][1])/(Math.abs(hy-sy)||1); };
+  const last=frames[frames.length-1]; const j= h(last,5)>h(last,6)? 5:6; const hl=h(last,j); if(hl<0.25) return frames; const lim=last.t-3500; let i=frames.length-1;
+  while(i>0&&frames[i].t>lim&&h(frames[i],j)>hl*0.5) i--;                                   // 손이 올라가 있는 구간을 지난다
+  while(i>0&&frames[i-1].t>lim&&h(frames[i-1],j)<h(frames[i],j)-0.02) i--;                   // 올라가기 시작한 곳까지
+  const cutT=frames[i].t-80; const out=frames.filter(f=>f.t<=cutT); return out.length>=4? out : frames.slice(0,4);
+}
+const frameDist=(a,b)=>{ let s=0,n=0; for(const k of Object.keys(FEATURES)){ if(a.f[k].v<0.4||b.f[k].v<0.4) continue; s+=Math.abs(circDiff(a.f[k].a,b.f[k].a)); n++; } return n? s/n : 40; };
+/** 시간축 맞추기(DTW). cost(i,j)가 작을수록 비슷. band: 대각선에서 벗어날 수 있는 칸 수. 돌려주는 값: 길 [[i,j]…] */
+export function dtwPath(n,m,cost,band,free=0){
+  const INF=1e9, D=Array.from({length:n},()=>new Float64Array(m).fill(INF)), from=Array.from({length:n},()=>new Int8Array(m)); const diag=(i)=> n>1? i*(m-1-free)/(n-1)+free/2 : 0;
+  for(let i=0;i<n;i++){ const c=diag(i), lo=Math.max(0,Math.floor(c-band)), hi=Math.min(m-1,Math.ceil(c+band));
+    for(let j=lo;j<=hi;j++){ const w=cost(i,j); if(i===0){ D[0][j]= j<=free? w : (j>0&&D[0][j-1]<INF? D[0][j-1]+w : INF); from[0][j]= j<=free? 0:2; if(j===0) D[0][0]=w; continue; }
+      let best=D[i-1][j], f=1; if(j>0&&D[i-1][j-1]<=best){ best=D[i-1][j-1]; f=3; } if(j>0&&D[i][j-1]<best){ best=D[i][j-1]; f=2; } D[i][j]= best<INF? best+w : INF; from[i][j]=f; } }
+  let j=m-1; if(free){ let b=INF; for(let q=Math.max(0,m-1-free);q<m;q++) if(D[n-1][q]<b){ b=D[n-1][q]; j=q; } } if(!(D[n-1][j]<INF)){ let b=INF; for(let q=0;q<m;q++) if(D[n-1][q]<b){ b=D[n-1][q]; j=q; } }
+  const path=[]; let i=n-1; while(i>=0&&j>=0){ path.push([i,j]); const f=from[i][j]; if(i===0&&(f===0||j===0)) break; if(f===3){ i--; j--; } else if(f===1) i--; else j--; } return path.reverse();
+}
+/** 찍은 동작 여러 번 → 모범 동작. opts.tol: 허용 범위의 바닥값(°) */
+export function buildMotionTemplate(takes, opts={}){
+  const hz=MOTION_HZ, tolBase=opts.tol??14, KEYS=Object.keys(FEATURES);
+  const seqs=(takes||[]).map(fr=>trimIdle(resampleTake(fr,hz),hz)).map(s=>s.length>hz*12? s.slice(0,hz*12):s).filter(s=>s.length>=hz*0.8); if(!seqs.length) return null;
+  const order=[...seqs].sort((a,b)=>a.length-b.length), ref=order[Math.floor((order.length-1)/2)], n=ref.length, nT=seqs.length;
+  const fr=seqs.reduce((c,s)=>c+s.filter(x=>x.ratio>0.45).length,0), tot=seqs.reduce((c,s)=>c+s.length,0); const an= fr*2>=tot? 'sho':'hip';
+  const anchor=(P)=> an==='sho'? [(P[1][0]+P[2][0])/2,(P[1][1]+P[2][1])/2] : [(P[7][0]+P[8][0])/2,(P[7][1]+P[8][1])/2];
+  const unitOf=(P)=> an==='sho'? Math.hypot(P[1][0]-P[2][0],P[1][1]-P[2][1]) : Math.hypot((P[1][0]+P[2][0])/2-(P[7][0]+P[8][0])/2,(P[1][1]+P[2][1])/2-(P[7][1]+P[8][1])/2);
+  // 각 촬영을 기준 촬영의 시간축에 맞춘다 → map[t][i] = 기준 i번째 순간에 해당하는 그 촬영의 프레임들
+  const maps=seqs.map(s=>{ if(s===ref) return ref.map((_,i)=>[i]); const m=s.length, band=Math.max(4,Math.round(0.35*Math.max(n,m))); const path=dtwPath(n,m,(i,j)=>frameDist(ref[i],s[j]),band); const map=Array.from({length:n},()=>[]); for(const [i,j] of path) map[i].push(j); for(let i=0;i<n;i++) if(!map[i].length) map[i]=[Math.min(m-1,Math.round(i*(m-1)/Math.max(1,n-1)))]; return map; });
+  const U=seqs.map(s=>median(s.map(x=>unitOf(x.pts)))||1), A0=seqs.map(s=>anchor(s[0].pts));
+  const ang=Array.from({length:n},()=>({})), sdSum={}, sdN={}, valid={};
+  for(let i=0;i<n;i++) for(const k of KEYS){ const per=[]; seqs.forEach((s,t)=>{ const vs=maps[t][i].map(j=>s[j].f[k]).filter(x=>x.v>=0.5); if(vs.length) per.push(circMean(vs.map(x=>x.a))); }); if(per.length<Math.max(1,Math.ceil(nT*0.6))) continue; const m=circMean(per); ang[i][k]=m; valid[k]=(valid[k]||0)+1; if(per.length>1){ sdSum[k]=(sdSum[k]||0)+Math.sqrt(per.reduce((q,v)=>q+circDiff(v,m)**2,0)/per.length); sdN[k]=(sdN[k]||0)+1; } }
+  const keys=KEYS.filter(k=>(valid[k]||0)>=n*0.6); if(keys.length<3) return null;
+  const sdOf=(k)=> sdN[k]? sdSum[k]/sdN[k] : 0; const tol=keys.map(k=>Math.round(clamp(Math.max(tolBase,2*sdOf(k)),tolBase,35))); const sd= keys.reduce((s,k)=>s+sdOf(k),0)/keys.length;
+  const sk=Array.from({length:n},(_,i)=>{ const pts=SK_IDX.map(()=>[0,0,0]); let ox=0,oy=0,c=0; seqs.forEach((s,t)=>{ for(const j of maps[t][i]){ const P=s[j].pts, a=anchor(P); P.forEach((q,z)=>{ pts[z][0]+=(q[0]-a[0])/U[t]; pts[z][1]+=(q[1]-a[1])/U[t]; pts[z][2]+=q[2]; }); ox+=(a[0]-A0[t][0])/U[t]; oy+=(a[1]-A0[t][1])/U[t]; c++; } }); return {pts:pts.map(q=>[q[0]/c,q[1]/c,q[2]/c]), o:[ox/c,oy/c]}; });
+  const dur=(n-1)/hz, K=clamp(Math.round(dur*5)+1,6,30), KS=clamp(Math.round(dur*2.5)+1,4,16);
+  const at=(pos)=>{ const i=Math.min(n-1,Math.floor(pos)), j=Math.min(n-1,i+1), u=pos-i; return {i,j,u}; };
+  const a8=[], s8=[], o8=[]; const q8=(v)=>Math.round(clamp(v*SK_SCALE,-127,127));
+  for(let q=0;q<K;q++){ const {i,j,u}=at(q*(n-1)/(K-1)); for(const k of keys){ const a=ang[i][k], b=ang[j][k]; const v= a==null? b : b==null? a : lerpAng(a,b,u); a8.push(v==null? -128 : Math.round(clamp(circDiff(v,0)/2,-90,90))); } }
+  for(let q=0;q<KS;q++){ const {i,j,u}=at(q*(n-1)/(KS-1)); SK_IDX.forEach((_,z)=>{ s8.push(q8(sk[i].pts[z][0]+(sk[j].pts[z][0]-sk[i].pts[z][0])*u), q8(sk[i].pts[z][1]+(sk[j].pts[z][1]-sk[i].pts[z][1])*u)); }); o8.push(q8(sk[i].o[0]+(sk[j].o[0]-sk[i].o[0])*u), q8(sk[i].o[1]+(sk[j].o[1]-sk[i].o[1])*u)); }
+  const sv=SK_IDX.map((_,z)=>String(Math.round(clamp(sk.reduce((s,x)=>s+x.pts[z][2],0)/n,0,1)*9))).join('');
+  const ranges=keys.map((k,x)=>{ let lo=0,hi=0; const base=a8[x]===-128? 0 : a8[x]*2; for(let q=0;q<K;q++){ const v=a8[q*keys.length+x]; if(v===-128) continue; const d=circDiff(v*2,base); lo=Math.min(lo,d); hi=Math.max(hi,d); } return hi-lo; }).sort((a,b)=>b-a); const move=Math.round(ranges.slice(0,3).reduce((s,v)=>s+v,0)/Math.min(3,ranges.length));
+  return {v:2, kind:'motion', n:nT, an, dur:+dur.toFixed(1), K, KS, keys, tol, a:packBytes(a8), s:packBytes(s8), o:packBytes(o8), sv, sd:+sd.toFixed(1), move};
+}
+const MOTION_CACHE=new WeakMap();
+/** 저장된 모범 동작을 쓰기 좋게 푼다. F[q]: q번째 순간의 {키:[각도,허용범위]}, S[q]: 윤곽 13점, O[q]: 몸 전체가 움직인 거리 */
+export function unpackMotion(tpl){
+  if(MOTION_CACHE.has(tpl)) return MOTION_CACHE.get(tpl); const nk=tpl.keys.length, a=unpackBytes(tpl.a), s=unpackBytes(tpl.s), o=unpackBytes(tpl.o); const vis=[...tpl.sv].map(ch=>+ch);
+  const F=Array.from({length:tpl.K},(_,q)=>{ const f={}; tpl.keys.forEach((k,x)=>{ const v=a[q*nk+x]; if(v!==-128&&v!=null) f[k]=[v*2,tpl.tol[x]]; }); return f; });
+  const S_=Array.from({length:tpl.KS},(_,q)=>SK_IDX.map((_,z)=>[s[(q*13+z)*2]/SK_SCALE, s[(q*13+z)*2+1]/SK_SCALE])); const O=Array.from({length:tpl.KS},(_,q)=>[o[q*2]/SK_SCALE,o[q*2+1]/SK_SCALE]);
+  let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; S_.forEach((sk,q)=>sk.forEach((pt,z)=>{ if(vis[z]<4) return; const x=pt[0]+O[q][0], y=pt[1]+O[q][1]; x0=Math.min(x0,x); x1=Math.max(x1,x); y0=Math.min(y0,y); y1=Math.max(y1,y); }));
+  const dec={tpl, K:tpl.K, KS:tpl.KS, dur:tpl.dur, an:tpl.an, keys:tpl.keys, tol:tpl.tol, F, S:S_, O, vis, box:{x0,x1,y0,y1}}; MOTION_CACHE.set(tpl,dec); return dec;
+}
+/** 모범 동작의 어느 순간을 그림용 관절 33점(0~1 좌표, 가로:세로 3:4 상자)으로. 동작 전체가 한 상자에 들어가게 크기를 고정한다. */
+export function motionPose(dec,tau){
+  const g=motionAt(dec,tau), b=dec.box; const span=Math.max(b.y1-b.y0,(b.x1-b.x0)/0.75,1.6), k=0.8/span, cx=(b.x0+b.x1)/2, cy=(b.y0+b.y1)/2;
+  const lm=Array.from({length:33},()=>({x:0.5,y:0.5,z:0,visibility:0}));
+  SK_IDX.forEach((idx,j)=>{ const q=g.sk[j]; lm[idx]={x:0.5+(q[0]/100+g.off[0]-cx)*k/0.75, y:0.5+(q[1]/100+g.off[1]-cy)*k, z:0, visibility:q[2]/10}; });
+  for(const [a,c] of [[29,27],[31,27],[30,28],[32,28]]) lm[a]=Object.assign({},lm[c],{visibility:0}); return lm;
+}
+/** 모범의 어느 순간(tau초)을 "멈춘 모범"과 같은 모양으로 돌려준다 → comparePose, 점선 그리기에 그대로 쓴다 */
+export function motionAt(dec,tau){
+  const u=clamp(dec.dur>0? tau/dec.dur : 0,0,1); const pf=u*(dec.K-1), i=Math.min(dec.K-1,Math.floor(pf)), j=Math.min(dec.K-1,i+1), uf=pf-i; const f={};
+  for(const k of dec.keys){ const a=dec.F[i][k], b=dec.F[j][k]; if(!a&&!b) continue; f[k]= !a? b : !b? a : [lerpAng(a[0],b[0],uf), a[1]]; }
+  const ps=u*(dec.KS-1), si=Math.min(dec.KS-1,Math.floor(ps)), sj=Math.min(dec.KS-1,si+1), us=ps-si;
+  const sk=dec.S[si].map((p,z)=>[(p[0]+(dec.S[sj][z][0]-p[0])*us)*100, (p[1]+(dec.S[sj][z][1]-p[1])*us)*100, dec.vis[z]*10/9]);
+  return {an:dec.an, f, sk, off:[dec.O[si][0]+(dec.O[sj][0]-dec.O[si][0])*us, dec.O[si][1]+(dec.O[sj][1]-dec.O[si][1])*us], tau:u*dec.dur};
+}
+export const SEG_NAMES=['동작 처음','동작 중간','동작 끝'];
+/** 따라 한 한 번을 채점한다. frames: [{tau(모범 시작부터 초), f}] */
+export function scoreFollow(dec, frames, opts={}){
+  const K=dec.K, step=dec.dur/(K-1), slack=clamp(dec.dur*0.2,0.4,1.0)*(opts.slackScale||1), padN=Math.max(1,Math.round(slack/step)); const M=K+2*padN; const fs=(frames||[]).filter(x=>x&&x.f); if(fs.length<3) return {sim:0, missing:true, per:{}, worst:null, seg:null, lag:0, mirrored:false};
+  // 참여자 동작을 모범과 같은 간격으로 다시 뽑는다(모범보다 조금 일찍·늦게 움직인 것까지 담는다)
+  const grid=[]; let p=0, miss=0; for(let j=0;j<M;j++){ const t=(j-padN)*step; while(p<fs.length-1&&Math.abs(fs[p+1].tau-t)<=Math.abs(fs[p].tau-t)) p++; const near=fs[p]; if(Math.abs(near.tau-t)>Math.max(0.45,step*1.5)){ grid.push(null); if(t>=0&&t<=dec.dur) miss++; } else grid.push(near.f); }
+  if(miss>K*0.4) return {sim:0, missing:true, per:{}, worst:null, seg:null, lag:0, mirrored:false};
+  const run=(mir)=>{ const cache=new Map(); const cmp=(i,j)=>{ const key=i*1000+j; if(cache.has(key)) return cache.get(key); const g=grid[j]; let r=null; if(g){ r=comparePose({f:dec.F[i]},g,{use:opts.use,tolScale:opts.tolScale,forceMirror:mir,slope:3.5,lowN:2,lowW:0.65}); if(r.n===0||r.miss>r.n) r=null; } cache.set(key,r); return r; };
+    const path=dtwPath(K,M,(i,j)=>{ const r=cmp(i,j); return r? 1-r.sim/100 : 0.8; },padN+1,2*padN); const best=new Map(); for(const [i,j] of path){ const r=cmp(i,j); const c= r? 1-r.sim/100 : 0.8; if(!best.has(i)||c<best.get(i).c) best.set(i,{c,j,r}); }
+    const sims=[], per={}; let lag=0, ln=0; for(let i=0;i<K;i++){ const b=best.get(i); const r=b&&b.r; sims.push(r? r.sim : 20); if(b){ lag+=(b.j-padN-i)*step; ln++; } if(!r) continue; for(const [k,v] of Object.entries(r.per)){ const tol=(dec.F[i][v.tk]||[0,14])[1]*(opts.tolScale||1); const e=per[k]||(per[k]={d:0,ex:0,n:0,maxEx:-1,dir:0,at:0,seg:[0,0,0]}); const ex=Math.max(0,v.d-tol); e.d+=v.d; e.ex+=ex; e.n++; e.seg[Math.min(2,Math.floor(i*3/K))]+=ex; if(ex>e.maxEx){ e.maxEx=ex; e.dir=v.dir; e.at=i; } } }
+    const mean=sims.reduce((s,v)=>s+v,0)/K; const low=[...sims].sort((a,b)=>a-b).slice(0,Math.max(2,Math.round(K/3))); const lowAvg=low.reduce((s,v)=>s+v,0)/low.length;
+    for(const e of Object.values(per)){ e.d/=e.n; e.ex/=e.n; e.segMax=e.seg.indexOf(Math.max(...e.seg)); e.segMean=Math.max(...e.seg)/Math.max(1,K/3); }
+    const worstK=Object.entries(per).filter(([,e])=>e.ex>2.5).sort((a,b)=>b[1].ex-a[1].ex)[0]; return {sim:0.5*mean+0.5*lowAvg, slack, sims, per, worst:worstK?worstK[0]:null, seg:worstK?worstK[1].segMax:null, lag: ln? lag/ln : 0, mirrored:mir}; };
+  const a=run(false); if(opts.mirror===false) return a; const b=run(true); return opts.preferMirror? (a.sim>b.sim+3? a:b) : (b.sim>a.sim+3? b:a);
+}
+
+/** 찍은 모범 동작으로 만든 "따라 하기" 동작 */
+export function motionMovement(def){
+  const tpl=def.tpl, dec=unpackMotion(tpl); const use= def.use&&def.use.length? def.use : null; const legs=['kneeL','kneeR','hipL','hipR'].some(k=>tpl.keys.includes(k)) && (!use||use.includes('legs'));
+  const handsUp=dec.S.some(s=> dec.vis[5]>=4&&dec.vis[6]>=4&&s[5][1]<s[0][1]&&s[6][1]<s[0][1]); const hold=(tpl.move||0)<12;
+  return { id:def.id, name:def.name, type:'follow', category:'모범 따라 하기', custom:true, kind:'motion', tpl, use, pass:def.pass??80, tolScale:def.tolScale??1, mirror:def.mirror!==false, count:def.count??10,
+    view: legs?'full':'upper', noHandsEnd:handsUp, isHold:hold, angleLabel:'지금 비슷한 정도', unit:'%', trunkLabel:'맞은 횟수', highlight:[], checks:[], feedback:{},
+    phaseNames:{lead:'준비', play:'따라 하는 중', rest:'확인', done:'완료'}, live:{ready:'모범을 보고 똑같이 따라 하세요', partial:''}, good:['맞았어요','똑같아요','좋아요'],
+    checkpoints:(def.checkpoints&&def.checkpoints.length)? def.checkpoints : ['먼저 모범 동작을 한 번 보기','점선(모범)이 움직이면 같은 빠르기로 따라 하기','빨간색으로 보이는 부위부터 고치기'],
+    setup: def.setup || (legs? '모범을 찍은 방향과 같은 방향에서, 전신이 보이게 서 주세요.' : '모범을 찍은 방향과 같은 방향에서, 어깨와 양팔이 보이게 해 주세요.'),
+    setupSay: legs? '전신이 보이게 서 주세요':'어깨와 양팔이 보이게 해 주세요' };
+}
+
+/** 모범 동작을 재생하면서, 참여자가 따라 한 것을 한 번씩 채점한다. 한 번 = 준비(카운트) → 모범 재생 → 판정 → 잠깐 쉼 */
+export class FollowAnalyzer {
+  constructor(mv, opts={}){ this.mv=mv; this.dec=unpackMotion(mv.tpl); this.goal=opts.goal??mv.count??10; this.pass=mv.pass??80; this.lead1=opts.lead1??1.6; this.lead=opts.lead??2; this.restSec=opts.rest??1.8; this.tail=clamp(this.dec.dur*0.15,0.3,0.7); this.reset(); }
+  reset(){ this.phase='lead'; this.reps=[]; this.hits=0; this.buf=[]; this.cmp=null; this.sim=null; this.mir=false; this.timeline=[]; this.lastSample=0; this.startT=null; this.phaseT=null; this.playT=null; this.noPerson=true; this.lastSeen=null; this.goodStreak=0; this.base=null; this.lastTick=null; this.last=null; this.offSince=null; }
+  _base(p,off,t,fast){ const an=this.dec.an; const o= an==='sho'? p.shoMid : p.hipMid; const u= an==='sho'? (Math.hypot(p.L.sho.x-p.R.sho.x,p.L.sho.y-p.R.sho.y)||1) : p.torso; const sx=this.mir?-1:1; const tx=o.x-sx*off[0]*u, ty=o.y-off[1]*u;
+    if(!this.base){ this.base={x:tx,y:ty,u,t}; return; } const dt=Math.max(0,(t-this.base.t)/1000); const k=1-Math.exp(-dt/(fast?0.25:2.5)); this.base.x+=(tx-this.base.x)*k; this.base.y+=(ty-this.base.y)*k; this.base.u+=(u-this.base.u)*(1-Math.exp(-dt/1.2)); this.base.t=t; }
+  update(lm,W,H,t){
+    if(this.startT==null) this.startT=t; if(this.phaseT==null) this.phaseT=t; const mv=this.mv, dec=this.dec;
+    const tau= this.phase==='play'? (t-this.playT)/1000 : 0; const ghost=motionAt(dec, this.phase==='play'? tau : 0);
+    const out=(o)=>Object.assign({count:this.reps.length, goal:this.goal, hits:this.hits, phase:this.phase, done:false, repEvent:null, angle:this.sim, trunk:null, cmp:this.cmp, mirrored:this.mir, tpl:ghost, base:this.base, pip:{tau:ghost.tau, dur:dec.dur, playing:this.phase==='play'}}, o);
+    const has=!!(lm&&lm.length>=33); let p=null, feats=null;
+    if(has){ p=analyzePose(lm,W,H); feats=poseFeatures(p); const c0=comparePose(ghost,feats,{use:mv.use,tolScale:mv.tolScale,mirror:mv.mirror,preferMirror:this.mir}); if(c0.n===0||c0.miss>c0.n){ this.noPerson=true; this.cmp=null; } else { this.noPerson=false; this.lastSeen=t; if(this.phase!=='play') this.mir=c0.mirrored; this.cmp=c0; this._base(p,ghost.off,t,this.phase!=='play'); } } else { this.noPerson=true; this.cmp=null; }
+    const seeCue= mv.view==='upper'?'어깨와 양팔이 화면에 다 보이게 해 주세요':'몸 전체가 화면에 보이게 서 주세요';
+    if(this.phase==='done') return out({cue:'완료', sev:'good', done:true, pose:p});
+    if(this.phase==='lead'){ const dur= this.reps.length? this.lead : this.lead1; const left=dur-(t-this.phaseT)/1000; let repEvent=null; const tick= this.reps.length? Math.ceil(left) : 0; if(tick!==this.lastTick&&tick>0&&tick<=3){ this.lastTick=tick; repEvent={tick}; }
+      if(left<=0){ this.phase='play'; this.playT=t; this.buf=[]; this.lastTick=null; this.sim=null; this.offSince=null; return out({phase:'play', cue:'따라 하세요', sev:'', repEvent:{go:true, n0:this.reps.length+1}, pose:p}); }
+      return out({cue: this.noPerson? seeCue : (this.reps.length? `${this.reps.length+1}번째 준비` : '모범이 움직이면 따라 하세요'), sev:'', leadLeft:tick||null, repEvent, pose:p}); }
+    if(this.phase==='rest'){ if((t-this.phaseT)/1000>=this.restSec){ this.phase='lead'; this.phaseT=t; } const r=this.last; return out({cue: r? r.cue : '', sev: r&&r.ok?'good':'warn', pose:p}); }
+    // 재생 중: 프레임을 모으고, 지금 모습이 모범의 "방금 전~지금" 중 어디와 가장 비슷한지로 색을 칠한다
+    if(has&&!this.noPerson){ this.buf.push({tau, f:feats}); let best=this.cmp; if(best.sim>55) this.mir=best.mirrored; for(const lag of [0.25,0.5]){ if(tau-lag<0) break; const c=comparePose(motionAt(dec,tau-lag),feats,{use:mv.use,tolScale:mv.tolScale,forceMirror:mv.mirror===false?false:this.mir}); if(c.n&&c.sim>best.sim) best=c; } this.cmp=best; this.sim= this.sim==null? best.sim : this.sim*0.6+best.sim*0.4; if(t-this.lastSample>100){ this.timeline.push({t:(t-this.startT)/1000, a:this.sim}); this.lastSample=t; } }
+    if(tau>=dec.dur+this.tail){
+      const res=scoreFollow(dec,this.buf,{use:mv.use,tolScale:mv.tolScale,mirror:mv.mirror,preferMirror:this.mir}); this.mir=res.mirrored; const wk=res.worst, we= wk? res.per[wk] : null; const ok=!res.missing&&res.sim>=this.pass&&!(we&&we.segMean>=10); // 한 부위가 한 구간 내내 10° 넘게 벗어나면 점수가 높아도 '다름'
+      const fix= wk? featureCue(wk,{dir:we.dir,flip:false}) : ''; const segName= res.seg!=null? SEG_NAMES[res.seg] : '';
+      const issues= res.missing? [{code:'lost',label:'몸이 화면에 잘 보이지 않았어요',sev:'bad'}] : (ok&&(!we||we.ex<6))? [] : wk? [{code:wk,label:`${FEATURES[wk].label} ${Math.round(we.d)}° 다름`,sev: ok?'warn':'bad'}] : [{code:'all',label:'모범과 전체적으로 달라요',sev:'bad'}];
+      const n=this.reps.length+1; if(ok) this.hits++; let late=null; if(!ok&&!res.missing){ const wide=scoreFollow(dec,this.buf,{use:mv.use,tolScale:mv.tolScale,forceMirror:undefined,mirror:mv.mirror,preferMirror:this.mir,slackScale:2.4}); const K3=Math.max(1,Math.floor(res.sims.length/3)), avg=(a)=>a.reduce((q,v)=>q+v,0)/Math.max(1,a.length); const head=avg(res.sims.slice(0,2*K3)), tailSim=avg(res.sims.slice(2*K3));
+        if(wide.sim>=res.sim+10) late= wide.lag>0? 'late':'early'; else if(tailSim<this.pass-12&&head>=this.pass) late='late'; } if(late){ issues.length=0; issues.push({code:late,label: late==='late'?'모범보다 늦었어요':'모범보다 빨랐어요',sev:'bad'}); } // 시간을 넉넉히 맞추면 비슷해지거나, 앞은 맞는데 끝만 다르면 → 모양이 아니라 빠르기 문제
+      const cue= res.missing? '몸이 화면에 보이게 서 주세요' : ok? `${mv.good[n%mv.good.length]}! ${Math.round(res.sim)}%` : late? (late==='late'?'모범보다 늦었어요. 점선과 같은 빠르기로':'모범보다 빨랐어요. 점선과 같은 빠르기로') : (fix? `${fix}${segName?` · ${segName}`:''}` : '모범을 다시 보고 따라 하세요');
+      const r={n, sim:res.sim, score:Math.round(res.sim), ok, issues, worst:wk, seg:res.seg, fix: late? '' : fix, late, lag:res.lag, per:res.per, cue, bottomT:(t-this.startT)/1000, dur:dec.dur}; this.reps.push(r); this.last=r; this.goodStreak= ok? this.goodStreak+1 : 0;
+      const done=this.reps.length>=this.goal; this.phase= done?'done':'rest'; this.phaseT=t; return out({count:this.reps.length, hits:this.hits, phase:this.phase, cue, sev: ok?'good':'warn', repEvent:r, done, pose:p}); }
+    // 한 부위가 0.35초 넘게 허용 범위를 10°쯤 벗어나 있으면, 전체 점수가 높아도 그 부위를 바로 짚어 준다
+    const w= !this.noPerson&&this.cmp&&this.cmp.worst? this.cmp.per[this.cmp.worst.k] : null; if(w&&w.sc<75){ if(this.offSince==null) this.offSince=t; } else this.offSince=null; const off= w&&this.offSince!=null&&t-this.offSince>350;
+    return out({cue: this.noPerson? seeCue : off? featureCue(this.cmp.worst.k,w) : '좋아요, 그대로 따라 하세요', sev: this.noPerson?'' : off? (w.sc<50?'bad':'warn') : 'good', pose:p, hinted:true});
+  }
+  summary(){
+    const reps=this.reps, mv=this.mv; if(!reps.length) return null; const avg=(a)=>a.reduce((s,v)=>s+v,0)/a.length; const sim=avg(reps.map(r=>r.sim)); const score=Math.round(sim);
+    const counts={}; reps.forEach(r=>r.issues.forEach(i=>{ const c= FEATURES[i.code]? i.code : (i.code==='late'||i.code==='early')? 'tempo' : null; if(c) counts[c]=(counts[c]||0)+1; })); const top=Object.entries(counts).sort((a,b)=>b[1]-a[1])[0]; const labelOf=(c)=> c==='tempo'? '빠르기' : FEATURES[c].label;
+    // 부위별로: 평균 몇 도 다른지, 어느 쪽으로, 동작의 어느 구간에서. 틀린 회차가 있으면 그 회차들에서 달랐던 곳만 모은다
+    const wrongReps=reps.filter(r=>!r.ok&&!r.late); const acc={}; (wrongReps.length? wrongReps : reps.filter(r=>!r.late)).forEach(r=>{ for(const [k,e] of Object.entries(r.per||{})){ const a=acc[k]||(acc[k]={d:0,ex:0,n:0,dir:0,seg:[0,0,0]}); a.d+=e.d; a.ex+=e.ex; a.n++; a.dir+=e.dir*(e.maxEx>0?e.maxEx:0); e.seg.forEach((v,i)=>a.seg[i]+=v); } });
+    const parts=Object.entries(acc).map(([k,a])=>({k, label:FEATURES[k].label, d:a.d/a.n, ex:a.ex/a.n, seg:a.seg.indexOf(Math.max(...a.seg)), cue:featureCue(k,{dir:a.dir<0?-1:1,flip:false})})).filter(x=>x.ex>3).sort((a,b)=>b.ex-a.ex).slice(0,4); const lateN=reps.filter(r=>r.late==='late').length, earlyN=reps.filter(r=>r.late==='early').length;
+    const segTop= parts[0]? SEG_NAMES[parts[0].seg] : null;
+    return {type:'follow', movement:mv.id, movementName:mv.name, score, grade:gradeOf(score), count:reps.length, goal:this.goal, hits:this.hits, sim, parts, lateN, earlyN,
+      topIssue: top?{code:top[0],label:labelOf(top[0]),n:top[1]}:null, reps, timeline:this.timeline, target:this.pass, unit:'%', angleLabel:'모범과 비슷한 정도',
+      tiles:[['맞은 횟수',`${this.hits} / ${reps.length}번`],['평균 비슷한 정도',`${Math.round(sim)}%`],['가장 자주 다른 곳', top?`${labelOf(top[0])} (${top[1]}번)`:'없음'],['주로 다른 구간', segTop||'없음']],
+      items:reps.map(r=>({cols:[`${r.n}`,`${Math.round(r.sim)}%`, r.late? '빠르기' : r.worst&&r.issues.length?FEATURES[r.worst].label:'—', r.late? '—' : r.seg!=null&&r.worst&&r.issues.length?SEG_NAMES[r.seg]:'—'], issues: r.issues.length? r.issues : (r.ok? [] : [{code:'all',label:'다름',sev:'bad'}]), score:r.score, flag:!r.ok})), itemHead:['회차','비슷한 정도','가장 다른 부위','구간'],
+      chart:{yLabel:'모범과 비슷한 정도(%)', y0:0, y1:100, target:this.pass, points:reps.map(r=>({t:r.bottomT,a:r.sim,score:r.score,n:r.n,issues:r.issues.length}))}};
+  }
+}
+
+/** 신호: 한 손만 머리 위로 0.5초. 촬영을 시작·끝낼 때 쓴다(폰에서 떨어져 있어도 되게). */
+export class HandSignal {
+  constructor(o={}){ this.holdMs=o.holdMs??500; this.since=null; this.side=null; this.fired=false; }
+  reset(){ this.since=null; this.side=null; this.fired=false; }
+  get raised(){ return this.since!=null; }
+  update(lm,t){ if(!(lm&&lm.length>=33)){ this.since=null; this.fired=false; return false; } const n=lm[0], head=Math.abs((lm[11].y+lm[12].y)/2-n.y)||0.05; const vis=(q)=>q.visibility==null?1:q.visibility;
+    const up=(w)=> vis(w)>0.3 && w.y<n.y-head*0.5; const down=(w,s)=> vis(w)<0.3 || w.y>s.y-head*0.2; const side= up(lm[15])&&down(lm[16],lm[12])? 'L' : up(lm[16])&&down(lm[15],lm[11])? 'R' : null;
+    if(!side){ this.since=null; this.fired=false; return false; } if(this.since==null||this.side!==side){ this.since=t; this.side=side; } if(!this.fired&&t-this.since>=this.holdMs){ this.fired=true; return true; } return false; }
+}
+
 /* ===== 달리기 자세 (런닝머신 옆에서 촬영) =====
  * 발걸음: 두 발목의 앞뒤 간격이 가장 벌어지는 순간을 한 걸음으로 센다(좌우 발 표시가 바뀌어도 영향 없음).
  * 기준값(발걸음 수·상체 기울기·위아래 흔들림)은 일반적인 달리기 지도 기준을 따른 기본값이며, 동작 정의에서 바꿀 수 있다.
@@ -623,6 +806,7 @@ export function makeAnalyzer(mv, opts={}){
   if(mv.type==='rate') return new RateAnalyzer(mv,opts);
   if(mv.type==='procedure') return new ProcedureRunner(mv,opts);
   if(mv.type==='match') return new MatchAnalyzer(mv,opts);
+  if(mv.type==='follow') return new FollowAnalyzer(mv,opts);
   if(mv.type==='gait') return new GaitAnalyzer(mv,opts);
   return new RepAnalyzer(mv,opts);
 }
@@ -652,6 +836,11 @@ export function buildComment(s){
     if(s.topIssue){ const k=s.topIssue.code; const ds=s.reps.map(r=>r.issues.find(i=>i.code===k)).filter(Boolean); ps.push(`가장 자주 달랐던 부위는 "${escH(s.topIssue.label)}"입니다(${s.count}회 중 ${s.topIssue.n}회). 화면의 점선에 이 부위부터 맞추면 점수가 가장 빨리 오릅니다.`); }
     else ps.push('모든 부위가 모범의 허용 범위 안에 들어왔습니다.');
     if(s.consistency!=null) ps.push(`자세 일관성은 ±${s.consistency.toFixed(1)}°입니다. 매번 같은 자세가 나올수록 이 숫자가 작아집니다${s.consistency<=4?' — 아주 고르게 반복했습니다.':s.consistency<=8?'.':' — 회차마다 자세가 달라지고 있으니 한 동작씩 천천히 반복해 보세요.'}`);
+  } else if(s.type==='follow'){
+    ps.push(`모범 동작을 ${s.count}번 따라 했고, 그중 ${s.hits}번이 모범과 맞았습니다(비슷한 정도 ${s.target}% 이상이면 맞음). 평균은 ${Math.round(s.sim)}%입니다.`);
+    const parts=(s.parts||[]).filter(x=>FEATURES[x.k]); if(parts.length){ ps.push(`${s.hits<s.count?'맞지 않은 회차에서 ':''}모범과 달랐던 곳 — `+parts.slice(0,3).map(x=>`<b>${escH(FEATURES[x.k].label)}</b>: ${SEG_NAMES[x.seg]||'동작 중'}에 평균 ${Math.round(+x.d||0)}° 다름${x.cue?`, ${escH(x.cue)}`:''}`).join(' / ')+'.'); ps.push('가장 앞에 적힌 부위 하나만 먼저 고쳐 보세요. 한 번에 한 가지씩 고치는 편이 빨리 늡니다.'); }
+    else ps.push('모든 부위가 모범의 허용 범위 안에 들어왔습니다. 다음에는 횟수를 늘리거나, 더 엄격한 기준으로 도전해 보세요.');
+    if((s.lateN||0)+(s.earlyN||0)>0) ps.push(`빠르기: 모범보다 늦은 회차 ${s.lateN||0}번, 빠른 회차 ${s.earlyN||0}번. 점선(모범)이 움직이는 빠르기에 맞춰 보세요.`);
   } else if(s.type==='gait'){
     ps.push(`${s.count}초 동안 ${s.steps}걸음, 평균 분당 ${s.cadence.toFixed(0)}보로 달렸습니다(기준 ${s.rateMin}~${s.rateMax}보). 상체는 ${s.lean>=0?'앞으로':'뒤로'} 평균 ${Math.abs(s.lean).toFixed(0)}° 기울었고, 위아래 흔들림은 다리 길이의 ${s.bounce.toFixed(0)}%였습니다.`);
     if(s.topIssue){ const fb=fbOf(s.topIssue.code); if(fb) ps.push(`가장 자주 나타난 문제는 "${fb.label}"입니다. ${fb.tip}`); } else ps.push('기준을 벗어난 항목이 없었습니다. 같은 자세로 시간을 조금씩 늘려 보세요.');

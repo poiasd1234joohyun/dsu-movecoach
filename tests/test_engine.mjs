@@ -1,5 +1,5 @@
-import { MOVEMENTS, makeAnalyzer, buildComment, buildReply, analyzePose, customMovement, poseFeatures, poseSample, buildPoseTemplate, comparePose, matchMovement, featureCue, StillCapture } from '../src/engine.mjs';
-import { squatPose, pressPose, squatScript, pressScript, simulate, seeded, studentSquatPlan, studentLevel, bowPose, bowScript, runScript, archeryPose, standPose, armsPose, poseScript, cprScript, plankPose, pushupPose, lungePose } from '../src/synth.mjs';
+import { MOVEMENTS, makeAnalyzer, buildComment, buildReply, analyzePose, customMovement, poseFeatures, poseSample, buildPoseTemplate, comparePose, matchMovement, featureCue, StillCapture, motionFrame, buildMotionTemplate, unpackMotion, motionAt, motionPose, scoreFollow, motionMovement, FollowAnalyzer, HandSignal, cutGestureTail, packBytes, unpackBytes, dtwPath } from '../src/engine.mjs';
+import { lerpPose, squatPose, pressPose, squatScript, pressScript, simulate, seeded, studentSquatPlan, studentLevel, bowPose, bowScript, runScript, archeryPose, standPose, armsPose, poseScript, cprScript, plankPose, pushupPose, lungePose } from '../src/synth.mjs';
 const W=1000,H=1000;
 function base(){ return Array.from({length:33},()=>({x:0.5,y:0.5,z:0,visibility:0.9})); }
 const set=(lm,i,p)=>{ lm[i]={x:p.x,y:p.y,z:0,visibility:0.9}; };
@@ -165,5 +165,42 @@ let fails=0; const check=(c,msg)=>{ if(!c){ fails++; console.log('FAIL:',msg);} 
   s=simulate(MOVEMENTS.cpr_compression, cprScript({rate:84,n:30})); check(s.topIssue.code==='slow', 'cpr synth slow');
   const an=makeAnalyzer(MOVEMENTS.plank,{goal:6}); for(let t=0;t<9000;t+=40) an.update(plankPose(t>4000?0.08:0),960,720,1000+t); const su=an.summary(); check(su && su.topIssue.code==='sag' && su.score>35 && su.score<70, `plank synth sag ${su&&su.score}`);
   check(analyzePose(pushupPose(0),960,720).mL.elbow>150 && analyzePose(pushupPose(1),960,720).mL.elbow<70, 'pushup synth'); check(Math.abs(analyzePose(lungePose(1),720,960).mL.knee-90)<12, 'lunge synth');
+}
+// --- 모범 동작(영상) 따라 하기 ---
+{ const MW=720, MH=960; const ease=(u)=>0.5-0.5*Math.cos(Math.PI*Math.max(0,Math.min(1,u)));
+  // 양궁 동작 한 번: 서 있다가 → 들어 올려 당기고 → 멈췄다가 → 내린다
+  const shot=(o={})=>{ const tin=o.tin??1.4, hold=o.hold??1.6, tout=o.tout??1.0, lead=o.lead??0.6; const fn=(t)=>{ const x=t-lead; const u= x<0?0 : x<tin? ease(x/tin) : x<tin+hold? 1 : x<tin+hold+tout? 1-ease((x-tin-hold)/tout) : 0; let lm=lerpPose(standPose(), archeryPose(o.pose||{}), u); if(o.mirror){ lm=lm.map(p=>({x:1-p.x,y:p.y,z:0,visibility:p.visibility})); for(const [a,b] of [[11,12],[13,14],[15,16],[23,24],[25,26],[27,28],[29,30],[31,32]]){ const q=lm[a]; lm[a]=lm[b]; lm[b]=q; } } return lm; }; fn.duration=lead+tin+hold+tout+0.6; return fn; };
+  let seed=7; const rnd=()=>{ seed=(seed*1664525+1013904223)>>>0; return seed/4294967296; }; const noisy=(lm)=>lm.map(p=>({x:p.x+(rnd()-0.5)*0.004,y:p.y+(rnd()-0.5)*0.004,z:0,visibility:p.visibility}));
+  const take=(fn)=>{ const fr=[]; for(let t=0;t<=fn.duration*1000;t+=1000/24) fr.push(motionFrame(noisy(fn(t/1000)),MW,MH,t)); return fr; };
+  // 글자로 바꾸기/되돌리기, 시간축 맞추기
+  { const a=[-128,-90,-1,0,1,90,127,5]; check(JSON.stringify(unpackBytes(packBytes(a)))===JSON.stringify(a), 'motion: 바이트를 글자로 바꿨다가 되돌리면 같다'); const path=dtwPath(4,6,(i,j)=>Math.abs(i*5/3-j),3); check(path[0][0]===0&&path[0][1]===0&&path[path.length-1][0]===3&&path[path.length-1][1]===5, 'motion: 시간축 맞추기가 처음과 끝을 잇는다'); }
+  const takes=[take(shot()), take(shot({tin:1.7,hold:1.4,lead:0.9})), take(shot({tin:1.2,hold:1.9,tout:1.2}))];
+  const tpl=buildMotionTemplate(takes); const size=JSON.stringify(tpl).length;
+  check(tpl&&tpl.kind==='motion'&&tpl.n===3&&tpl.an==='sho'&&tpl.keys.length===10&&tpl.dur>3.8&&tpl.dur<5.2, `motion: 세 번 찍어 모범 ${tpl.dur}초, 키 ${tpl.K}개`);
+  check(tpl.sd<3&&tpl.move>60, `motion: 빠르기가 다른 세 번을 맞춰 평균(차이 ±${tpl.sd}°), 움직임 ${tpl.move}°`); check(size<1300, `motion: 저장 크기 ${size}자(1,300자 미만) → 링크에 담을 수 있다`);
+  check(buildMotionTemplate([take(shot()).slice(0,6)])===null, 'motion: 너무 짧게 찍힌 것은 모범이 되지 않는다');
+  const dec=unpackMotion(tpl); { const mid=motionAt(dec,tpl.dur*0.5), start=motionAt(dec,0); check(Math.abs(mid.f.armL[0]-90)<8&&Math.abs(start.f.armL[0])<14, `motion: 가운데는 팔을 든 자세(${Math.round(mid.f.armL[0])}°), 처음은 내린 자세`); const lm=motionPose(dec,tpl.dur*0.5); check(lm.length===33&&lm[15].y<lm[23].y&&lm.every(p=>p.x>-0.05&&p.x<1.05&&p.y>-0.05&&p.y<1.05), 'motion: 그림으로 다시 그릴 수 있다(상자 안)'); }
+  const mv=customMovement({id:'cm1',kind:'motion',name:'양궁 <b>슈팅</b>',tpl,count:3}); check(mv.type==='follow'&&mv.view==='full'&&!mv.isHold&&makeAnalyzer(mv) instanceof FollowAnalyzer, 'motion: 따라 하기 동작과 분석기');
+  // 가상 학생: 모범이 재생되기 시작할 때 맞춰 움직인다. per(k): k번째 회차의 동작
+  const follow=(per, goal=3, lag=0.3)=>{ const an=makeAnalyzer(mv,{goal}); let t=1000, playT=null, k=0; const stand=standPose(); for(let n=0;n<24*200;n++){ t+=1000/24; const lm= an.phase==='play'&&playT!=null? per(k)((t-playT)/1000-lag) : stand; const out=an.update(noisy(lm),MW,MH,t); if(out.repEvent&&out.repEvent.go) playT=t; if(out.repEvent&&out.repEvent.n) k=out.repEvent.n; if(out.done) break; } return an.summary(); };
+  const P=(o)=>()=>shot(Object.assign({lead:0},o));
+  let s=follow(P({})); check(s.type==='follow'&&s.count===3&&s.hits===3&&s.sim>93&&!s.parts.length, `follow: 똑같이 따라 하면 3/3 (${s.sim.toFixed(0)}%)`);
+  s=follow(P({}),3,0.75); check(s.hits===3, `follow: 0.45초쯤 늦게 따라 해도 맞음 (${s.sim.toFixed(0)}%)`);
+  s=follow(P({mirror:true})); check(s.hits===3&&s.sim>93, 'follow: 좌우가 반대인 사람(왼손잡이)도 맞음');
+  s=follow(P({pose:{elbowDrop:32}})); check(s.hits===0&&s.topIssue.code==='armR'&&s.parts[0].k==='armR'&&s.parts[0].seg===1&&/오른팔을 더 올리세요/.test(s.parts[0].cue), `follow: 당기는 팔이 낮으면 "다름" + 오른팔·동작 중간 (${s.sim.toFixed(0)}%)`);
+  s=follow(P({pose:{bowDrop:25}})); check(s.hits===0&&s.topIssue.code==='armL', 'follow: 활 든 팔이 낮으면 왼팔을 짚는다');
+  s=follow(()=>()=>standPose()); check(s.hits===0&&s.sim<50, `follow: 가만히 서 있으면 낮은 점수 (${s.sim.toFixed(0)}%)`);
+  s=follow(P({tin:2.3,hold:2.5,tout:1.6})); check(s.hits===0&&s.lateN===3&&s.topIssue.label==='빠르기'&&!s.parts.length, 'follow: 너무 느리면 부위가 아니라 빠르기 문제로 알려 준다');
+  s=follow((k)=> k===1? P({pose:{elbowDrop:32}})() : P({})(), 4); check(s.hits===3&&s.count===4&&s.items[1].flag&&!s.items[0].flag&&s.tiles[0][1]==='3 / 4번', 'follow: 4번 중 틀린 한 번만 "다름"');
+  { const html=buildComment(s); check(/4번 따라 했고, 그중 3번/.test(html)&&/오른팔/.test(html), 'follow: 결과 문장에 맞은 횟수와 다른 부위'); check(!/<b>슈팅/.test(buildComment(Object.assign({},s,{movementName:'<b>x'}))), 'follow: 결과 문장은 바깥 글자를 그대로 넣지 않는다'); }
+  // 처음 한 번은 준비 숫자(3·2·1) → 재생 → 판정 → 쉼
+  { const an=makeAnalyzer(mv,{goal:2}); const seen=new Set(); let t=1000, ticks=0, went=false; for(let n=0;n<24*20;n++){ t+=1000/24; const out=an.update(standPose(),MW,MH,t); seen.add(out.phase); if(out.repEvent&&out.repEvent.tick) ticks++; if(out.repEvent&&out.repEvent.go) went=true; if(out.tpl) check.tplOk= Array.isArray(out.tpl.sk)&&out.tpl.sk.length===13&&!!out.pip; if(out.done) break; } check(ticks===2&&went&&seen.has('lead')&&seen.has('play')&&seen.has('rest')&&seen.has('done')&&check.tplOk, `follow: 재생 → 판정 → 준비 숫자(2·1) → 재생 → 끝, 점선과 작은 모범 화면 정보 (숫자 ${ticks}번)`); }
+  // 손 신호: 한 손만 머리 위로 0.5초
+  { const up=armsPose({ar:0.75,armL:172,foreL:180,armR:8,foreR:4,legVis:0.95,cy:0.34}); const fire=(pose)=>{ const h=new HandSignal(); let f=null; for(let t=0;t<1500;t+=40) if(h.update(pose,t)&&f==null) f=t; return f; };
+    check(fire(up)>=480&&fire(up)<=600, `signal: 한 손을 들면 0.5초 뒤 신호 (${fire(up)}ms)`); check(fire(standPose())===null&&fire(archeryPose())===null, 'signal: 서 있거나 활을 당긴 자세는 신호가 아니다'); check(fire(armsPose({ar:0.75,armL:172,foreL:180,armR:172,foreR:180,legVis:0.95,cy:0.34}))===null, 'signal: 두 손을 다 들면 신호가 아니다(끝내기 동작과 구분)');
+    const base=shot(); const withTail=(t)=> t<base.duration? base(t) : lerpPose(standPose(), up, ease((t-base.duration)/0.7)); const fr=[]; for(let t=0;t<=(base.duration+1.3)*1000;t+=1000/24) fr.push(motionFrame(noisy(withTail(t/1000)),MW,MH,t)); const cut=cutGestureTail(fr); const end=cut[cut.length-1].t/1000;
+    check(end>base.duration-0.5&&end<base.duration+0.15, `signal: 끝내려고 손을 든 부분은 잘라 낸다 (${end.toFixed(2)}초, 동작 끝 ${base.duration.toFixed(2)}초)`); const t2=buildMotionTemplate([cut,takes[1],takes[2]]); check(Math.abs(t2.dur-tpl.dur)<0.4, 'signal: 잘라 낸 촬영으로 만든 모범의 길이가 같다'); }
+  // 멈춘 자세도 "동작 모범"으로 찍을 수 있다(예: 플랭크처럼 버티는 자세)
+  { const hold=()=>{ const fr=[]; for(let t=0;t<=3000;t+=1000/24) fr.push(motionFrame(noisy(archeryPose()),MW,MH,t)); return fr; }; const th=buildMotionTemplate([hold(),hold()]); const mh=motionMovement({id:'h',name:'버티기',tpl:th}); check(th&&th.move<12&&mh.isHold, `motion: 거의 안 움직이면 "멈춘 자세"로 본다(움직임 ${th.move}°)`); }
 }
 console.log(fails? `\n${fails} FAIL(S)`:'\nALL OK');

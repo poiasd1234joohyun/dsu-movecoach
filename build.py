@@ -18,7 +18,7 @@ syn = strip_module(rd('src', 'synth.mjs'))
 qr = rd('vendor', 'qrcodejs', 'qrcode.min.js').strip()
 assert '</script' not in qr.lower()
 # 순서 주의: v4_app2.js 가 맨 끝에서 화면을 처음 그리므로 나머지는 모두 그 앞에 와야 한다. v5_visual.js(그림)는 v4_app1.js(SCENES 사용)보다 앞.
-app = '\n'.join(rd('src', f) for f in ['v4_core.js', 'v5_visual.js', 'v5_match.js', 'v4_app1.js', 'v4_try.js', 'v4_app2.js'])
+app = '\n'.join(rd('src', f) for f in ['v4_core.js', 'v5_visual.js', 'v6_game.js', 'v5_match.js', 'v4_app1.js', 'v4_try.js', 'v4_app2.js'])
 i192 = rd('assets', 'icon192.b64').strip(); i512 = rd('assets', 'icon512.b64').strip()
 dsu = rd('assets', 'dsu_logo.b64').strip(); ui = rd('assets', 'ui_logo.b64').strip()
 manifest = '{"name":"DSU 무브코치","short_name":"무브코치","start_url":".","display":"standalone","background_color":"#ffffff","theme_color":"#e01838","icons":[{"src":"data:image/png;base64,%s","sizes":"192x192","type":"image/png"},{"src":"data:image/png;base64,%s","sizes":"512x512","type":"image/png"}]}' % (i192, i512)
